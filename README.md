@@ -1,4 +1,13 @@
-# Autologika Android 0.12.0
+# Autologika Android 0.14.0
+
+## Nowe w 0.14.0
+
+- pełna edycja zapisanych kart magazynowych, w tym producenta, numerów OE, dopasowania, cen, lokalizacji i stanu,
+- szybka korekta stanu przyciskami −1 i +1 bez otwierania formularza,
+- usuwanie części jako synchronizowany tombstone,
+- podsumowanie wartości magazynu oraz liczby pozycji z niskim stanem,
+- zgodność z pojazdami i numery krzyżowe widoczne bezpośrednio na liście,
+- walidacja kodu GTIN i wszystkich wartości liczbowych przed zapisem.
 
 ## Nowe w 0.12.0
 - magazyn własny części zsynchronizowany z rekordami aplikacji PC,
@@ -72,8 +81,8 @@ eas login
 eas build -p android --profile preview
 ```
 
-## Lokalny APK 0.12.0
-Gotowy plik instalacyjny znajduje się w `release/Autologika-Android-0.12.0.apk`.
+## Lokalny APK 0.14.0
+Gotowy plik instalacyjny znajduje się w `release/Autologika-Android-0.14.0.apk`.
 Jest podpisany lokalnym kluczem deweloperskim i służy do bezpośredniej instalacji
 na urządzeniu testowym. Publikacja w Google Play wymaga trwałego klucza wydawniczego.
 
