@@ -1,0 +1,104 @@
+# Autologika Android 0.12.0
+
+## Nowe w 0.12.0
+- magazyn własny części zsynchronizowany z rekordami aplikacji PC,
+- skanowanie EAN, UPC i GTIN przez Zebra USB HID / DataWedge oraz aparat,
+- wyszukiwanie kolejno w magazynie, lokalnej pamięci, katalogach produktów i dokładnych wynikach WWW,
+- automatyczne uzupełnianie nazwy, producenta, numeru katalogowego, opisu i strony źródłowej,
+- lokalny cache trafień przez 180 dni i braku wyniku przez 24 godziny,
+- możliwość otwarcia strony źródłowej przed zapisaniem części w magazynie.
+
+## Poprawka 0.10.1
+- marka i model z AZTEC są dopasowywane do katalogu niezależnie od wielkości liter,
+- wartości spoza katalogu są zachowywane i wyświetlane jako pola ręczne.
+
+## Nowe w 0.10
+- nowe logo AutoLogika jako ikona aplikacji, znak w menu i ekran ładowania,
+- dekoder kodu AZTEC z polskiego dowodu rejestracyjnego dla skanera Zebra,
+- automatyczne uzupełnianie rejestracji, VIN-u, marki, modelu, roku, silnika, mocy i danych posiadacza,
+- obsługa danych z USB HID / DataWedge oraz surowych bajtów Zebra CoreScanner/SNAPI,
+- zachowanie surowego skanu do diagnostyki, jeśli dokumentu nie uda się odczytać.
+
+Dekodowanie standardu dowodu korzysta z pakietu
+[`polish-vehicle-registration-certificate-decoder`](https://github.com/dex4er/js-polish-vehicle-registration-certificate-decoder)
+udostępnionego na licencji GPL-2.0.
+
+## Nowe w 0.9
+- edycja danych klientów i pojazdów bezpośrednio z list,
+- walidacja adresu e-mail, VIN-u, roku, mocy i przebiegu,
+- normalizacja numeru rejestracyjnego, VIN-u i kodu silnika,
+- blokada duplikatów VIN i numerów rejestracyjnych,
+- automatyczne odświeżanie danych klienta i pojazdu w powiązanych zleceniach.
+
+## Nowe w 0.8
+- usuwanie klientów z pełną kaskadą pojazdów, zleceń i załączników,
+- osobne usuwanie pojazdów oraz aktywnych i archiwalnych zleceń,
+- podgląd skutków przed trwałym usunięciem i synchronizowane tombstone,
+- odbiór skanów Zebra przez USB HID / DataWedge,
+- równoległe skanowanie aparatem kodów AZTEC, PDF417, QR, Code 128 i Code 39,
+- lokalny zapis surowych payloadów do dalszego przygotowania dekodera dowodu rejestracyjnego.
+
+Natywna aplikacja Android (React Native / Expo) dla tabletu. Offline-first: tablet ma własną SQLite, a rekordy i załączniki synchronizują się z Autologika Cloud / Supabase.
+
+## Nowe w 0.7
+- zakres naprawy z pełnym katalogiem 618 wariantów prac i procedurami zgodnymi z Desktop,
+- własne pozycje naprawy bez opuszczania Centrum zlecenia,
+- wspólne rozliczenie płatności, akceptacji i checklisty wydania,
+- działający przycisk „Zamknij i oznacz jako wydane”,
+- archiwum zakończonych zleceń z przywracaniem i trwałym usuwaniem danych zlecenia,
+- tworzenie zlecenia dla istniejącego pojazdu albo wraz z nowym klientem i pojazdem,
+- wersja aplikacji i Android `versionCode` przygotowane pod nowy APK.
+
+## Nowe w 0.6
+- pięć dokumentów Autologiki PDF dołączonych jako zasoby offline,
+- otwieranie/udostępnianie PDF przez system Android,
+- dokumentacja zdjęciowa zlecenia podzielona na: PRZYJĘCIE / DIAGNOZA / NAPRAWA / WYDANIE,
+- usuwanie zdjęć jako tombstone synchronizowany z PC i chmurą,
+- po synchronizacji usunięty załącznik jest również kasowany z prywatnego Storage,
+- lokalny eksport awaryjnej kopii danych do JSON,
+- poprawka błędu składni migracji SQLite z wcześniejszej wersji,
+- zachowane: Workflow, terminarz, Centrum zlecenia, części, płatności, timer, aparat, VIN/AZTEC, podpis klienta i Auth/RLS.
+
+## Uruchomienie developerskie
+```bash
+npm install
+npx expo start
+```
+
+## APK przez EAS
+```bash
+npm install -g eas-cli
+eas login
+eas build -p android --profile preview
+```
+
+## Lokalny APK 0.12.0
+Gotowy plik instalacyjny znajduje się w `release/Autologika-Android-0.12.0.apk`.
+Jest podpisany lokalnym kluczem deweloperskim i służy do bezpośredniej instalacji
+na urządzeniu testowym. Publikacja w Google Play wymaga trwałego klucza wydawniczego.
+
+Do ponownego lokalnego buildu użyj JDK 17, Android SDK 36 i polecenia:
+```powershell
+cd android
+.\gradlew.bat assembleRelease
+```
+
+## Chmura
+Używaj wyłącznie klucza anon/publishable oraz konta Supabase Auth. Nigdy nie umieszczaj `service_role` w APK. Bucket `order-files` pozostaje prywatny.
+
+## Backup
+Eksport JSON jest kopią awaryjną konkretnego tabletu. Nie zastępuje centralnej synchronizacji ani docelowego backupu chmury.
+
+
+## Zmiany 0.6
+- parytet zmian Desktop 0.20.1–0.20.4
+- bezpieczniejsza konfiguracja Supabase: normalizacja URL, blokada sb_secret_, test połączenia, bez wyświetlania pełnego klucza
+- Szybkie przyjęcie: kaskadowy katalog Marka → Model → Generacja → Rok → Silnik → Moc → Kod silnika
+- ten sam katalog pojazdów co Desktop 0.20.4, z trybem ręcznym dla brakujących wariantów
+- generation/year/engine/power_hp/engine_code zapisywane w pojeździe i zleceniu oraz synchronizowane przez sync_records
+
+
+## Hotfix 0.6.2
+- usunięto surowe węzły tekstowe/odstępy w JSX formularza Szybkie przyjęcie, które mogły powodować `Text strings must be rendered within a <Text> component`;
+- `SafeAreaView` pochodzi teraz z `react-native-safe-area-context`;
+- zabezpieczono warunkowe renderowanie `wait_state`, aby React Native nie dostał surowego stringa.
