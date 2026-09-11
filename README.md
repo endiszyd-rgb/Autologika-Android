@@ -1,4 +1,11 @@
-# Autologika Android 0.14.0
+# Autologika Android 0.14.1
+
+## Poprawka 0.14.1
+
+- lista zleceń rozpoznaje przypisany pojazd po identyfikatorze, VIN-ie albo numerze rejestracyjnym,
+- brakujące lub nieaktualne `vehicle_cloud_id` jest automatycznie naprawiane przy jednoznacznym dopasowaniu,
+- dane pojazdu zapisane w zleceniu nie są już błędnie oznaczane jako „brak pojazdu”,
+- wybór istniejącego pojazdu w nowym zleceniu odzyskuje poprawną pozycję po usunięciu lub synchronizacji wcześniejszego wyboru.
 
 ## Nowe w 0.14.0
 
