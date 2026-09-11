@@ -1,4 +1,11 @@
-# Autologika Android 0.14.1
+# Autologika Android 0.14.2
+
+## Poprawka 0.14.2
+
+- Centrum zlecenia pokazuje dane z aktualnego rekordu pojazdu zamiast nieaktualnej kopii zapisanej w zleceniu,
+- wybór zlecenia i nagłówek Centrum korzystają z tego samego mechanizmu rozpoznawania pojazdu co lista zleceń,
+- powiązanie jest automatycznie naprawiane po VIN-ie lub numerze rejestracyjnym także po wejściu bezpośrednio do Centrum,
+- identyfikatory przesłane jako liczba i tekst są traktowane jednakowo.
 
 ## Poprawka 0.14.1
 

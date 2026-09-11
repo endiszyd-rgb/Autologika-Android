@@ -22,3 +22,9 @@ test('does not report a missing vehicle when the order contains its snapshot',()
   assert.equal(result.vehicle,null)
   assert.equal(result.display.plate,'PO 999ZZ')
 })
+
+test('matches synchronized identifiers regardless of their serialized type',()=>{
+  const result=resolveOrderVehicle({vehicle_cloud_id:123,plate:'PO 123AB'},[{...vehicles[0],cloud_id:'123'}])
+  assert.equal(result.vehicle.cloud_id,'123')
+  assert.equal(result.missing,false)
+})

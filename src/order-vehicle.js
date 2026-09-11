@@ -2,7 +2,7 @@ const clean=value=>String(value??'').trim()
 const key=value=>clean(value).toLocaleUpperCase('pl-PL').replace(/[^A-Z0-9]/g,'')
 
 export function resolveOrderVehicle(order={},vehicles=[]){
-  const linked=vehicles.find(vehicle=>vehicle.cloud_id===clean(order.vehicle_cloud_id))
+  const linked=vehicles.find(vehicle=>clean(vehicle.cloud_id)===clean(order.vehicle_cloud_id))
   let vehicle=linked||null,matchedBy=linked?'ID':''
   if(!vehicle&&key(order.vin)){
     const matches=vehicles.filter(row=>key(row.payload?.vin)===key(order.vin))
