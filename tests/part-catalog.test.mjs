@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {isGtin,mapWebSearch,normalizeBarcode} from '../src/part-catalog.js'
+import {enrichPartFromHtml,isGtin,mapWebSearch,normalizeBarcode} from '../src/part-catalog.js'
 
 test('normalizes Zebra prefixes and validates GTIN',()=>{
   assert.equal(normalizeBarcode(']E05901947342091\r\n'),'5901947342091')
@@ -18,4 +18,13 @@ test('maps exact automotive search result to an inventory draft',()=>{
 
 test('rejects a search result without the scanned barcode',()=>{
   assert.equal(mapWebSearch('<a href="https://example.test" class="result l1"><div class="title" title="28SKV013 sensor">x</div></a>','5901947342091'),null)
+})
+
+test('extracts catalog data, fitment and cross numbers from a product page',()=>{
+  const html=`<title>Czujnik ESEN SKV do BMW Seria 1, Seria 2</title><script type="application/ld+json">{"@type":"Product","name":"Czujnik parkowania","sku":"28SKV013","brand":{"name":"ESEN SKV"},"isAccessoryOrSparePartFor":{"name":"BMW Seria 1 E81"}}</script><p>Numery OE: 66209261582, 66202180149</p>`
+  const result=enrichPartFromHtml({barcode:'5901947342091',name:'wynik'},html)
+  assert.equal(result.brand,'ESEN SKV')
+  assert.equal(result.part_no,'28SKV013')
+  assert.match(result.vehicle_fitment,/BMW Seria 1 E81/)
+  assert.match(result.cross_numbers,/66209261582/)
 })
