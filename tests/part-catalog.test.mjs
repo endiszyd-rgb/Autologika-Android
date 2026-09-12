@@ -28,3 +28,13 @@ test('extracts catalog data, fitment and cross numbers from a product page',()=>
   assert.match(result.vehicle_fitment,/BMW Seria 1 E81/)
   assert.match(result.cross_numbers,/66209261582/)
 })
+
+test('fills verified TEKNOROT data from a sparse marketplace result',()=>{
+  const html=`<a class="result__a" href="https://www.ebay.ca/itm/225894369105">5901532528992 TEKNOROT Rod/Strut, stabiliser for AUDI,SEAT,SKODA,VW - eBay</a><a class="result__snippet">5901532528992 TEKNOROT Rod/Strut, stabiliser for AUDI,SEAT,SKODA,VW</a>`
+  const result=mapWebSearch(html,'5901532528992')
+  assert.equal(result.name,'Łącznik stabilizatora — oś przednia')
+  assert.equal(result.brand,'TEKNOROT')
+  assert.equal(result.part_no,'V-557')
+  assert.match(result.vehicle_fitment,/Škoda Octavia II/)
+  assert.match(result.cross_numbers,/1K0411315B/)
+})

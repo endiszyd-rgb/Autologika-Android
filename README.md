@@ -1,4 +1,12 @@
-# Autologika Android 0.14.2
+# Autologika Android 0.15.0
+
+## Nowe w 0.15.0
+
+- skan Zebra USB HID / DataWedge w magazynie uruchamia wyszukiwanie automatycznie po ostatniej cyfrze, bez naciskania Enter lub przycisku „Szukaj”,
+- wyszukiwanie internetowe korzysta z dodatkowego źródła DuckDuckGo Lite i preferuje katalogi motoryzacyjne przed marketplace,
+- dokładniejsze rozpoznawanie producenta i numeru katalogowego z tytułu oraz opisu wyniku,
+- polskie nazwy popularnych części oraz oczyszczone listy pasujących pojazdów i numerów OE,
+- kod `5901532528992` jest rozpoznawany jako TEKNOROT V-557 — łącznik stabilizatora.
 
 ## Poprawka 0.14.2
 
