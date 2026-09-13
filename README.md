@@ -1,4 +1,11 @@
-# Autologika Android 0.15.0
+# Autologika Android 0.15.2
+
+## Nowe w 0.15.2
+
+- katalog prac zgodny z PC: 48 grup, 339 prac i 1063 warianty,
+- dodatkowe szczeg??owe pozycje diagnostyczne w ka?dej grupie,
+- w?asne szablony zsynchronizowane z PC s? dost?pne w Centrum zlecenia,
+- dodanie w?asnego szablonu przenosi cen?, czas, opis, procedur?, checklist? QC, cz??ci i materia?y.
 
 ## Nowe w 0.15.0
 
