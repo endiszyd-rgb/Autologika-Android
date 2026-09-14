@@ -1,6 +1,6 @@
 {
   "name": "autologika-android",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -19,6 +19,7 @@
     "expo-image-picker": "~57.0.17",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.19",
+    "expo-speech-recognition": "^57.0.0",
     "expo-sqlite": "~57.0.3",
     "polish-vehicle-registration-certificate-decoder": "^1.0.1",
     "react": "19.2.3",

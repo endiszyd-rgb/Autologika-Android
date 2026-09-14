@@ -2,27 +2,40 @@
   "expo": {
     "name": "Autologika",
     "slug": "autologika-android",
-    "version": "0.15.3",
+    "version": "0.15.4",
     "icon": "./assets/app-icon.png",
     "orientation": "landscape",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "pl.autologika.mobile",
-      "versionCode": 23,
+      "versionCode": 24,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#080a0d"
       },
       "permissions": [
         "CAMERA",
-        "READ_MEDIA_IMAGES"
+        "READ_MEDIA_IMAGES",
+        "RECORD_AUDIO"
       ]
     },
     "plugins": [
       "expo-asset",
       "expo-secure-store",
       "expo-sharing",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Pozwól aplikacji Autologika używać mikrofonu do dyktowania notatek warsztatowych.",
+          "speechRecognitionPermission": "Pozwól aplikacji Autologika zamieniać mowę na tekst.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts",
+            "com.google.android.as"
+          ]
+        }
+      ]
     ]
   }
 }
