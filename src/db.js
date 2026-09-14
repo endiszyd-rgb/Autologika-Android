@@ -1,5 +1,7 @@
 import * as SQLite from 'expo-sqlite'
 import * as FileSystem from 'expo-file-system/legacy'
+import {ORDER_CHILD_TYPES,relatedDeletionRows} from './deletion-graph.js'
+import {recordId,sameRecordId} from './record-id.js'
 
 let dbPromise
 export function db(){ if(!dbPromise)dbPromise=SQLite.openDatabaseAsync('autologika-mobile.db'); return dbPromise }
@@ -39,12 +41,12 @@ export async function updateCustomerGraph(id,input){
  if(!payload.name)throw new Error('Wpisz nazwę lub imię klienta.')
  if(payload.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email))throw new Error('Podaj prawidłowy adres e-mail.')
  await patch('customers',id,payload)
- const [vehicles,orders]=await Promise.all([list('vehicles'),list('orders')]),vehicleIds=new Set(vehicles.filter(x=>x.payload.customer_cloud_id===id).map(x=>x.cloud_id))
- for(const order of orders.filter(x=>vehicleIds.has(x.payload.vehicle_cloud_id)))await patch('orders',order.cloud_id,{customer:payload.name})
+ const [vehicles,orders]=await Promise.all([list('vehicles'),list('orders')]),vehicleIds=new Set(vehicles.filter(x=>sameRecordId(x.payload.customer_cloud_id,id)).map(x=>recordId(x.cloud_id)))
+ for(const order of orders.filter(x=>vehicleIds.has(recordId(x.payload.vehicle_cloud_id))))await patch('orders',order.cloud_id,{customer:payload.name})
 }
 export async function vehiclePayload(input,id=''){
  const customerId=clean(input.customer_cloud_id),customer=customerId?await get('customers',customerId):null,plate=normalizePlate(input.plate),vin=normalizeVin(input.vin),make=clean(input.make)
- if(customerId&&!customer)throw new Error('Wybrany klient nie istnieje.');if(!make)throw new Error('Wpisz markę pojazdu.');if(!plate&&!vin)throw new Error('Podaj numer rejestracyjny lub VIN.');if(vin&&!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw new Error('VIN musi mie? 17 prawid?owych znak?w.')
+ if(customerId&&!customer)throw new Error('Wybrany klient nie istnieje.');if(!make)throw new Error('Wpisz markę pojazdu.');if(!plate&&!vin)throw new Error('Podaj numer rejestracyjny lub VIN.');if(vin&&!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw new Error('VIN musi mieć 17 prawidłowych znaków.')
  const vehicles=await list('vehicles'),duplicate=vehicles.find(x=>x.cloud_id!==id&&((vin&&normalizeVin(x.payload.vin)===vin)||(plate&&normalizePlate(x.payload.plate)===plate)))
  if(duplicate)throw new Error(vin&&normalizeVin(duplicate.payload.vin)===vin?'Pojazd z tym VIN-em już istnieje.':'Pojazd z tym numerem rejestracyjnym już istnieje.')
  return {customer_cloud_id:customerId||null,plate,vin,make,model:clean(input.model),generation:clean(input.generation),year:optionalNumber(input.year,1886,new Date().getFullYear()+1,'Rok produkcji'),engine:clean(input.engine),power_hp:optionalNumber(input.power_hp,1,2500,'Moc silnika'),engine_code:clean(input.engine_code).toUpperCase(),mileage:optionalNumber(input.mileage,0,10000000,'Przebieg')||0,notes:clean(input.notes)}
@@ -55,33 +57,30 @@ export async function updateVehicleGraph(id,input){
  const payload={...current.payload,...await vehiclePayload(input,id)}
  await patch('vehicles',id,payload)
  const customer=payload.customer_cloud_id?await get('customers',payload.customer_cloud_id):null,orders=await list('orders')
- for(const order of orders.filter(x=>x.payload.vehicle_cloud_id===id))await patch('orders',order.cloud_id,{customer:customer?.payload.name||'',plate:payload.plate,vin:payload.vin,make:payload.make,model:payload.model,generation:payload.generation,year:payload.year,engine:payload.engine,power_hp:payload.power_hp,engine_code:payload.engine_code,mileage:payload.mileage})
+ for(const order of orders.filter(x=>sameRecordId(x.payload.vehicle_cloud_id,id)))await patch('orders',order.cloud_id,{customer:customer?.payload.name||'',plate:payload.plate,vin:payload.vin,make:payload.make,model:payload.model,generation:payload.generation,year:payload.year,engine:payload.engine,power_hp:payload.power_hp,engine_code:payload.engine_code,mileage:payload.mileage})
 }
 
 export async function remove(type,id){ const d=await db(); await d.runAsync('UPDATE records SET deleted_at=?,updated_at=?,dirty=1 WHERE entity_type=? AND cloud_id=?',[now(),now(),type,id]) }
-const ORDER_CHILD_TYPES=['diagnostics','order_notes','job_part_orders','order_items','payments','work_logs','communications','approvals','quote_approvals','order_events','sales_refs','attachments','signatures','work_procedure_runs','order_qc']
 export async function deletionPlan(type,id){
   if(!['customers','vehicles','orders'].includes(type))throw new Error('Nieobsługiwany typ rekordu.')
   const rows={}
-  for(const entity of ['customers','vehicles','orders','appointments',...ORDER_CHILD_TYPES])rows[entity]=await list(entity)
-  const root=rows[type].find(x=>x.cloud_id===id)
+  for(const entity of ['customers','vehicles','orders','appointments','service_reminders_v2',...ORDER_CHILD_TYPES])rows[entity]=await list(entity)
+  const root=rows[type].find(x=>sameRecordId(x.cloud_id,id))
   if(!root)throw new Error('Rekord już nie istnieje.')
-  const vehicleIds=new Set(type==='customers'?rows.vehicles.filter(x=>x.payload.customer_cloud_id===id).map(x=>x.cloud_id):type==='vehicles'?[id]:[])
-  const orderIds=new Set(type==='orders'?[id]:rows.orders.filter(x=>vehicleIds.has(x.payload.vehicle_cloud_id)).map(x=>x.cloud_id))
-  const deletions=[...ORDER_CHILD_TYPES.flatMap(entity=>rows[entity].filter(x=>orderIds.has(x.payload.order_cloud_id)).map(x=>({type:entity,id:x.cloud_id,payload:x.payload}))),...rows.orders.filter(x=>orderIds.has(x.cloud_id)).map(x=>({type:'orders',id:x.cloud_id,payload:x.payload})),...rows.vehicles.filter(x=>vehicleIds.has(x.cloud_id)).map(x=>({type:'vehicles',id:x.cloud_id,payload:x.payload}))]
+  const {vehicleIds,orderIds,vehicleReminders,reminderLinks,deletions,appointments}=relatedDeletionRows(rows,type,id)
   if(type==='customers')deletions.push({type:'customers',id,payload:root.payload})
-  const appointments=rows.appointments.filter(x=>orderIds.has(x.payload.order_cloud_id)||vehicleIds.has(x.payload.vehicle_cloud_id))
-  return {type,id,label:type==='customers'?root.payload.name:type==='vehicles'?[root.payload.plate,root.payload.make,root.payload.model].filter(Boolean).join(' · '):`${root.payload.plate||''} · ${root.payload.title||'Zlecenie'}`,deletions,appointments,counts:{customers:type==='customers'?1:0,vehicles:vehicleIds.size,orders:orderIds.size,attachments:deletions.filter(x=>x.type==='attachments').length,appointments:appointments.length}}
+  return {type,id,label:type==='customers'?root.payload.name:type==='vehicles'?[root.payload.plate,root.payload.make,root.payload.model].filter(Boolean).join(' · '):`${root.payload.plate||''} · ${root.payload.title||'Zlecenie'}`,deletions,appointments,reminderLinks,counts:{customers:type==='customers'?1:0,vehicles:vehicleIds.size,orders:orderIds.size,attachments:deletions.filter(x=>x.type==='attachments').length,appointments:appointments.length,reminders:vehicleReminders.length+reminderLinks.length}}
 }
 export async function cascadeRemove(type,id){
   const plan=await deletionPlan(type,id)
   for(const row of plan.deletions.filter(x=>x.type==='attachments'))try{if(row.payload.local_uri)await FileSystem.deleteAsync(row.payload.local_uri,{idempotent:true})}catch{}
   for(const appointment of plan.appointments){
     const changes={}
-    if(plan.type==='orders'&&appointment.payload.order_cloud_id===id)changes.order_cloud_id=null
-    if(plan.type!=='orders'){if(appointment.payload.order_cloud_id&&plan.deletions.some(x=>x.type==='orders'&&x.id===appointment.payload.order_cloud_id))changes.order_cloud_id=null;if(appointment.payload.vehicle_cloud_id&&plan.deletions.some(x=>x.type==='vehicles'&&x.id===appointment.payload.vehicle_cloud_id))changes.vehicle_cloud_id=null}
+    if(plan.type==='orders'&&sameRecordId(appointment.payload.order_cloud_id,id))changes.order_cloud_id=null
+    if(plan.type!=='orders'){if(appointment.payload.order_cloud_id&&plan.deletions.some(x=>x.type==='orders'&&sameRecordId(x.id,appointment.payload.order_cloud_id)))changes.order_cloud_id=null;if(appointment.payload.vehicle_cloud_id&&plan.deletions.some(x=>x.type==='vehicles'&&sameRecordId(x.id,appointment.payload.vehicle_cloud_id)))changes.vehicle_cloud_id=null}
     if(Object.keys(changes).length)await patch('appointments',appointment.cloud_id,changes)
   }
+  for(const reminder of plan.reminderLinks)await patch('service_reminders_v2',reminder.cloud_id,{order_cloud_id:null})
   for(const row of plan.deletions)await remove(row.type,row.id)
   return plan
 }

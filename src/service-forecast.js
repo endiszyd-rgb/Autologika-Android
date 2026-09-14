@@ -24,6 +24,12 @@ export function forecastUrgency(dueDate,dueMileage,currentMileage,now=Date.now()
  return{state:'PLANNED',label:'zaplanować',rank:2,daysLeft:days,kmLeft:km}
 }
 
+export function attachServiceHistory(orders=[],items=[]){
+ const names=new Map()
+ for(const record of items){const item=record?.payload||record||{},orderId=String(item.order_cloud_id||item.order_id||'');if(!orderId||String(item.kind||'').toUpperCase()!=='ROBOCIZNA')continue;const name=String(item.work_name||item.name||'').trim();if(name)names.set(orderId,[...(names.get(orderId)||[]),name])}
+ return orders.map(order=>({...order,service_text:[order.service_text,...(names.get(String(order.id||order.cloud_id||''))||[])].filter(Boolean).join(' | ')}))
+}
+
 export function buildServiceForecast(input={},options={}){
  const now=dateMs(options.now)||Date.now(),vehicle=input.vehicle||{},orders=input.orders||[],reminders=input.reminders||[],currentMileage=Number(vehicle.mileage||0),openReminders=reminders.filter(row=>String(row.status||'OPEN').toUpperCase()==='OPEN')
  const manual=openReminders.map(row=>{const u=forecastUrgency(row.due_date,row.due_mileage,currentMileage,now);return{id:`reminder:${row.id||row.cloud_id||row.title}`,ruleId:null,title:row.title||'Zaplanowana obsługa',dueDate:row.due_date||null,dueMileage:row.due_mileage==null?null:Number(row.due_mileage),source:'REMINDER',sourceLabel:'zapisane przypomnienie',confidence:'HIGH',...u}})

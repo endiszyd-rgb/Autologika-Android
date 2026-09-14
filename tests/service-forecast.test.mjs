@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {buildServiceForecast} from '../src/service-forecast.js'
+import {attachServiceHistory,buildServiceForecast} from '../src/service-forecast.js'
 
 const now='2026-09-14T10:00:00.000Z'
 
@@ -21,4 +21,10 @@ test('manual reminder replaces an inferred duplicate',()=>{
 test('does not infer service from unfinished orders',()=>{
  const result=buildServiceForecast({vehicle:{},orders:[{status:'NAPRAWA',opened_at:'2026-09-01',title:'Wymiana płynu hamulcowego'}],reminders:[]},{now})
  assert.equal(result.rows.length,0)
+})
+
+test('uses synchronized labor items to enrich Android service history',()=>{
+ const orders=attachServiceHistory([{id:'order-1',status:'WYDANE',opened_at:'2025-10-01'}],[{payload:{order_cloud_id:'order-1',kind:'ROBOCIZNA',work_name:'Wymiana oleju silnikowego'}}])
+ assert.match(orders[0].service_text,/Wymiana oleju/)
+ assert.ok(buildServiceForecast({orders,vehicle:{},reminders:[]},{now}).rows.some(row=>row.ruleId==='oil'))
 })
