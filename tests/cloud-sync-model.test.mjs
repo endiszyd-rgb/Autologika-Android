@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {FULL_REPLAY_INTERVAL_MS,needsFullReplay,remotePageRoute,shouldApplyRemote} from '../src/cloud-sync-model.js'
+import {FULL_REPLAY_INTERVAL_MS,assertCloudOwner,needsFullReplay,remotePageRoute,shouldApplyRemote} from '../src/cloud-sync-model.js'
+
+test('Android keeps one local database bound to its Cloud account',()=>{
+ assert.equal(assertCloudOwner('','account-1'),'account-1')
+ assert.equal(assertCloudOwner('account-1','account-1'),'account-1')
+ assert.throws(()=>assertCloudOwner('account-1','account-2'),/innym kontem Cloud/)
+})
 
 test('Android replays the cursor boundary and orders all record types consistently',()=>{
  const stamp='2026-09-15T10:00:00.000Z'

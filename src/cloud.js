@@ -1,13 +1,13 @@
 import * as SecureStore from 'expo-secure-store'
 import * as FileSystem from 'expo-file-system/legacy'
 import { dirty, markClean, metaGet, metaSet, put, db } from './db'
-import { needsFullReplay, remotePageRoute, shouldApplyRemote } from './cloud-sync-model'
+import { assertCloudOwner, needsFullReplay, remotePageRoute, shouldApplyRemote } from './cloud-sync-model'
 
 const K='autologika_cloud_config_v2', S='autologika_cloud_session_v2'
 export async function loadCloud(){ try{return JSON.parse(await SecureStore.getItemAsync(K)||'{}')}catch{return {}} }
 export function normalizeUrl(value=''){return String(value||'').trim().replace(/\/+(rest|auth|storage)\/v1\/?$/i,'').replace(/\/+$/,'')}
 export function keyKind(key=''){const k=String(key||'').trim();if(k.startsWith('sb_publishable_'))return 'publishable';if(k.startsWith('eyJ'))return 'legacy-anon';if(k.startsWith('sb_secret_'))return 'secret';return k?'unknown':'empty'}
-export async function saveCloud(c){const current=await loadCloud();const incoming=String(c?.key||'').trim();const next={...current,...c,url:normalizeUrl(c?.url??current.url),key:incoming||current.key||''};if(keyKind(next.key)==='secret')throw new Error('Nie używaj klucza sb_secret_ w aplikacji. Wklej Publishable key (sb_publishable_...).');await SecureStore.setItemAsync(K,JSON.stringify(next));return next}
+export async function saveCloud(c){const current=await loadCloud();const incoming=String(c?.key||'').trim();const next={...current,...c,url:normalizeUrl(c?.url??current.url),key:incoming||current.key||''};if(keyKind(next.key)==='secret')throw new Error('Nie używaj klucza sb_secret_ w aplikacji. Wklej Publishable key (sb_publishable_...).');const session=await loadSession();if(session.user?.id)next.workshopId=session.user.id;await SecureStore.setItemAsync(K,JSON.stringify(next));return next}
 export async function publicCloudConfig(){const c=await loadCloud();return {...c,key:'',keyConfigured:!!c.key,keyLength:String(c.key||'').length,keyKind:keyKind(c.key),keyHint:c.key?`${String(c.key).slice(0,14)}…${String(c.key).slice(-4)}`:''}}
 export async function loadSession(){ try{return JSON.parse(await SecureStore.getItemAsync(S)||'{}')}catch{return {}} }
 async function saveSession(s){ await SecureStore.setItemAsync(S,JSON.stringify(s||{})); return s }
@@ -15,13 +15,13 @@ export async function logout(){ await SecureStore.deleteItemAsync(S) }
 function ok(c){return /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(normalizeUrl(c.url||''))&&String(c.key||'').length>20&&keyKind(c.key)!=='secret'}
 function base(c){return normalizeUrl(c.url||'')}
 async function authReq(c,path,opt={}){const r=await fetch(base(c)+path,{...opt,headers:{'apikey':c.key,'Content-Type':'application/json',...(opt.headers||{})}});const t=await r.text();if(!r.ok)throw new Error(`Auth ${r.status}: ${t.slice(0,300)}`);return t?JSON.parse(t):null}
-export async function login(email,password){const c=await loadCloud();if(!ok(c))throw new Error('Najpierw podaj URL i Publishable key Supabase.');const s=await authReq(c,'/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email,password})});await saveSession({access_token:s.access_token,refresh_token:s.refresh_token,expires_at:Date.now()+Number(s.expires_in||3600)*1000,user:s.user});return s.user}
-export async function signup(email,password){const c=await loadCloud();if(!ok(c))throw new Error('Najpierw podaj URL i Publishable key Supabase.');const s=await authReq(c,'/auth/v1/signup',{method:'POST',body:JSON.stringify({email,password})});if(s?.access_token)await saveSession({access_token:s.access_token,refresh_token:s.refresh_token,expires_at:Date.now()+Number(s.expires_in||3600)*1000,user:s.user});return s}
+export async function login(email,password){const c=await loadCloud();if(!ok(c))throw new Error('Najpierw podaj URL i Publishable key Supabase.');const s=await authReq(c,'/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email,password})});const id=assertCloudOwner(await metaGet('lastSyncWorkshopId'),s.user?.id);await saveSession({access_token:s.access_token,refresh_token:s.refresh_token,expires_at:Date.now()+Number(s.expires_in||3600)*1000,user:s.user});await saveCloud({workshopId:id});return s.user}
+export async function signup(email,password){const c=await loadCloud();if(!ok(c))throw new Error('Najpierw podaj URL i Publishable key Supabase.');const s=await authReq(c,'/auth/v1/signup',{method:'POST',body:JSON.stringify({email,password})});if(s?.access_token){const id=assertCloudOwner(await metaGet('lastSyncWorkshopId'),s.user?.id);await saveSession({access_token:s.access_token,refresh_token:s.refresh_token,expires_at:Date.now()+Number(s.expires_in||3600)*1000,user:s.user});await saveCloud({workshopId:id})}return s}
 async function sessionToken(c){let s=await loadSession();if(!s?.access_token)throw new Error('Zaloguj się do Autologika Cloud.');if(s.expires_at&&Date.now()>s.expires_at-60000&&s.refresh_token){const n=await authReq(c,'/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:s.refresh_token})});s={access_token:n.access_token,refresh_token:n.refresh_token||s.refresh_token,expires_at:Date.now()+Number(n.expires_in||3600)*1000,user:n.user||s.user};await saveSession(s)}return s.access_token}
 async function headers(c,extra={}){const token=await sessionToken(c);return {'apikey':c.key,'Authorization':`Bearer ${token}`,'Content-Type':'application/json',...extra}}
 async function req(c,path,opt={}){const r=await fetch(base(c)+path,{...opt,headers:{...(await headers(c)),...(opt.headers||{})}});if(!r.ok)throw new Error(`Cloud ${r.status}: ${(await r.text()).slice(0,350)}`);if(r.status===204)return null;const t=await r.text();return t?JSON.parse(t):null}
 export async function testConnection(){const c=await loadCloud();if(!ok(c))throw new Error('Uzupełnij poprawny Project URL i Publishable key Supabase.');let r;try{r=await fetch(base(c)+'/auth/v1/settings',{headers:{apikey:c.key}})}catch(e){throw new Error(`Brak połączenia z ${base(c)}: ${e?.message||e}`)}const t=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${t.slice(0,300)}`);return {ok:true,status:r.status}}
-export async function currentAccount(){const c=await loadCloud(),s=await loadSession();return {configured:ok(c),loggedIn:!!s?.access_token,email:s?.user?.email||'',userId:s?.user?.id||'',workshopId:c.workshopId||s?.user?.id||''}}
+export async function currentAccount(){const c=await loadCloud(),s=await loadSession();return {configured:ok(c),loggedIn:!!s?.access_token,email:s?.user?.email||'',userId:s?.user?.id||'',workshopId:s?.user?.id||c.workshopId||''}}
 
 const safeName=n=>String(n||'file').replace(/[^a-zA-Z0-9._-]+/g,'_').slice(-120)||'file'
 const encPath=p=>String(p||'').split('/').map(encodeURIComponent).join('/')
@@ -68,8 +68,9 @@ async function performSync({full=false}={}){
  const workshopId=account.userId; if(!workshopId)throw new Error('Brak identyfikatora konta warsztatu.')
  let cursorReset=false,c=initial
  const cursorOwner=await metaGet('lastSyncWorkshopId')
+ assertCloudOwner(cursorOwner,workshopId)
  if(String(c.workshopId||'')!==workshopId){c=await saveCloud({...c,workshopId});cursorReset=true}
- if(cursorOwner!==workshopId){await metaSet('lastSync','');await metaSet('lastSyncWorkshopId',workshopId);cursorReset=true}
+ if(cursorOwner!==workshopId){await metaSet('lastSync','');cursorReset=true}
  const outgoing=await dirty(); let pushed=0,filesUp=0,filesDown=0
  for(const x of outgoing){
    let payload=x.payload
