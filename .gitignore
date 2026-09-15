@@ -5,6 +5,7 @@ node_modules/
 .kotlin/
 artifacts/
 dist-ui-check*/
+dist-sync-check/
 release/
 *.apk
 *.aab

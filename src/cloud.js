@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store'
 import * as FileSystem from 'expo-file-system/legacy'
 import { dirty, markClean, metaGet, metaSet, put, db } from './db'
+import { needsFullReplay, remotePageRoute, shouldApplyRemote } from './cloud-sync-model'
 
 const K='autologika_cloud_config_v2', S='autologika_cloud_session_v2'
 export async function loadCloud(){ try{return JSON.parse(await SecureStore.getItemAsync(K)||'{}')}catch{return {}} }
@@ -79,24 +80,27 @@ async function performSync({full=false}={}){
    await markClean(x.entity_type,x.cloud_id); pushed++
  }
  const savedCursor=await metaGet('lastSync')||''
- const since=full||cursorReset||!savedCursor?'1970-01-01T00:00:00.000Z':savedCursor
+ const replay=full||cursorReset||needsFullReplay(await metaGet('lastFullSyncAt'))
+ const since=replay||!savedCursor?'1970-01-01T00:00:00.000Z':savedCursor
  const rows=[];let offset=0
  while(true){
-   const page=await req(c,`/rest/v1/sync_records?select=entity_type,cloud_id,payload,updated_at,deleted_at,version&workshop_id=eq.${encodeURIComponent(workshopId)}&updated_at=gt.${encodeURIComponent(since)}&order=updated_at.asc,cloud_id.asc&limit=1000&offset=${offset}`,{method:'GET'})||[]
+   const page=await req(c,remotePageRoute(workshopId,since,offset),{method:'GET'})||[]
+   if(!Array.isArray(page))throw new Error('Cloud zwrócił nieprawidłową stronę synchronizacji.')
    rows.push(...page);if(page.length<1000)break;offset+=page.length
  }
  const d=await db(); let pulled=0,skipped=0
  for(const r of rows){
    const local=await d.getFirstAsync('SELECT payload,updated_at,dirty FROM records WHERE entity_type=? AND cloud_id=?',[r.entity_type,r.cloud_id])
-   if(local?.dirty && Date.parse(local.updated_at||0)>Date.parse(r.updated_at||0)){skipped++;continue}
+   if(!shouldApplyRemote(local,r)){skipped++;continue}
    let payload=r.payload||{}
    if(r.entity_type==='attachments'&&r.deleted_at){try{const lp=local?.payload?JSON.parse(local.payload):{};if(lp.local_uri)await FileSystem.deleteAsync(lp.local_uri,{idempotent:true})}catch{}}
    if(r.entity_type==='attachments'&&!r.deleted_at){const before=payload.local_uri;payload=await downloadAttachment(c,r.cloud_id,payload);if(!before&&payload.local_uri)filesDown++}
    await d.runAsync(`INSERT INTO records(entity_type,cloud_id,payload,updated_at,deleted_at,version,dirty) VALUES (?,?,?,?,?,?,0) ON CONFLICT(entity_type,cloud_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,version=excluded.version,dirty=0`,[r.entity_type,r.cloud_id,JSON.stringify(payload),r.updated_at,r.deleted_at||null,r.version||1]); pulled++
  }
  if(rows.length)await metaSet('lastSync',rows[rows.length-1].updated_at)
+ if(replay)await metaSet('lastFullSyncAt',new Date().toISOString())
  await metaSet('lastSyncWorkshopId',workshopId)
- return {pushed,pulled,skipped,remoteRows:rows.length,filesUp,filesDown,full:Boolean(full||cursorReset),cursor:rows.at(-1)?.updated_at||savedCursor,workshopId}
+ return {pushed,pulled,skipped,remoteRows:rows.length,filesUp,filesDown,full:Boolean(replay),cursor:rows.at(-1)?.updated_at||savedCursor,workshopId}
 }
 export async function syncNow(options={}){
  if(activeSync)return activeSync
