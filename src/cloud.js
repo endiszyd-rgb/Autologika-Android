@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store'
 import * as FileSystem from 'expo-file-system/legacy'
 import { dirty, markClean, metaGet, metaSet, put, db } from './db'
-import { assertCloudOwner, needsFullReplay, remotePageRoute, shouldApplyRemote } from './cloud-sync-model'
+import { assertCloudOwner, needsFullReplay, remoteHeadsRoute, remotePageRoute, remoteWins, shouldApplyRemote } from './cloud-sync-model'
 
 const K='autologika_cloud_config_v2', S='autologika_cloud_session_v2'
 export async function loadCloud(){ try{return JSON.parse(await SecureStore.getItemAsync(K)||'{}')}catch{return {}} }
@@ -62,6 +62,12 @@ async function downloadAttachment(c,cloudId,payload){
 }
 
 let activeSync=null
+async function fetchRemoteHeads(c,workshopId,outgoing){
+ const groups=new Map(),heads=new Map()
+ for(const row of outgoing){if(!row.cloud_id)continue;if(!groups.has(row.entity_type))groups.set(row.entity_type,[]);const ids=groups.get(row.entity_type);if(!ids.includes(row.cloud_id))ids.push(row.cloud_id)}
+ for(const [entityType,ids] of groups)for(let offset=0;offset<ids.length;offset+=200){const batch=ids.slice(offset,offset+200),rows=await req(c,remoteHeadsRoute(workshopId,entityType,batch),{method:'GET'})||[];if(!Array.isArray(rows))throw new Error('Cloud zwrócił nieprawidłowe dane kontroli konfliktów.');for(const row of rows)heads.set(`${row.entity_type}\0${row.cloud_id}`,row)}
+ return heads
+}
 async function performSync({full=false}={}){
  const initial=await loadCloud(); if(!ok(initial))throw new Error('Uzupe\u0142nij URL i Publishable key Supabase.')
  const account=await currentAccount(); if(!account.loggedIn)throw new Error('Zaloguj si\u0119 do Autologika Cloud.')
@@ -71,8 +77,10 @@ async function performSync({full=false}={}){
  assertCloudOwner(cursorOwner,workshopId)
  if(String(c.workshopId||'')!==workshopId){c=await saveCloud({...c,workshopId});cursorReset=true}
  if(cursorOwner!==workshopId){await metaSet('lastSync','');cursorReset=true}
- const outgoing=await dirty(); let pushed=0,filesUp=0,filesDown=0
+ const outgoing=await dirty(),heads=await fetchRemoteHeads(c,workshopId,outgoing); let pushed=0,conflicts=0,filesUp=0,filesDown=0
  for(const x of outgoing){
+   const remote=heads.get(`${x.entity_type}\0${x.cloud_id}`)
+   if(remoteWins(remote,x.updated_at)){await markClean(x.entity_type,x.cloud_id);conflicts++;continue}
    let payload=x.payload
    if(x.entity_type==='attachments'&&x.deleted_at){await deleteRemoteAttachment(c,payload)}
    if(x.entity_type==='attachments'&&!x.deleted_at&&!payload.storage_path){payload=await uploadAttachment(c,workshopId,x);if(payload.storage_path)filesUp++}
@@ -81,7 +89,7 @@ async function performSync({full=false}={}){
    await markClean(x.entity_type,x.cloud_id); pushed++
  }
  const savedCursor=await metaGet('lastSync')||''
- const replay=full||cursorReset||needsFullReplay(await metaGet('lastFullSyncAt'))
+ const replay=full||cursorReset||conflicts>0||needsFullReplay(await metaGet('lastFullSyncAt'))
  const since=replay||!savedCursor?'1970-01-01T00:00:00.000Z':savedCursor
  const rows=[];let offset=0
  while(true){
@@ -101,7 +109,7 @@ async function performSync({full=false}={}){
  if(rows.length)await metaSet('lastSync',rows[rows.length-1].updated_at)
  if(replay)await metaSet('lastFullSyncAt',new Date().toISOString())
  await metaSet('lastSyncWorkshopId',workshopId)
- return {pushed,pulled,skipped,remoteRows:rows.length,filesUp,filesDown,full:Boolean(replay),cursor:rows.at(-1)?.updated_at||savedCursor,workshopId}
+ return {pushed,pulled,skipped,conflicts,remoteRows:rows.length,filesUp,filesDown,full:Boolean(replay),cursor:rows.at(-1)?.updated_at||savedCursor,workshopId}
 }
 export async function syncNow(options={}){
  if(activeSync)return activeSync

@@ -6,6 +6,7 @@ node_modules/
 artifacts/
 dist-ui-check*/
 dist-sync-check/
+dist-conflict-check/
 release/
 *.apk
 *.aab

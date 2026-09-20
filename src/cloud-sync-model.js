@@ -15,6 +15,14 @@ export function remotePageRoute(workshopId,since,offset=0){
  return `/rest/v1/sync_records?select=entity_type,cloud_id,payload,updated_at,deleted_at,version&workshop_id=eq.${encodeURIComponent(workshopId)}&updated_at=gte.${encodeURIComponent(since)}&order=updated_at.asc,entity_type.asc,cloud_id.asc&limit=1000&offset=${offset}`
 }
 
+export function remoteHeadsRoute(workshopId,entityType,cloudIds){
+ return `/rest/v1/sync_records?select=entity_type,cloud_id,updated_at,deleted_at,device_id&workshop_id=eq.${encodeURIComponent(workshopId)}&entity_type=eq.${encodeURIComponent(entityType)}&cloud_id=in.(${cloudIds.map(x=>encodeURIComponent(String(x))).join(',')})&limit=${cloudIds.length}`
+}
+
+export function remoteWins(remote,localUpdated){
+ return !!remote&&(Date.parse(remote.updated_at||'')||0)>(Date.parse(localUpdated||'')||0)
+}
+
 export function shouldApplyRemote(local,remote){
  if(!local)return true
  const localTime=Date.parse(local.updated_at||'')||0

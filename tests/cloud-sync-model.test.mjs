@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {FULL_REPLAY_INTERVAL_MS,assertCloudOwner,needsFullReplay,remotePageRoute,shouldApplyRemote} from '../src/cloud-sync-model.js'
+import {FULL_REPLAY_INTERVAL_MS,assertCloudOwner,needsFullReplay,remoteHeadsRoute,remotePageRoute,remoteWins,shouldApplyRemote} from '../src/cloud-sync-model.js'
+
+test('Android checks exact remote records before uploading offline changes',()=>{
+ const query=new URL(remoteHeadsRoute('workshop-1','vehicles',['vehicle-1','vehicle-2']),'https://example.test').searchParams
+ assert.equal(query.get('entity_type'),'eq.vehicles')
+ assert.equal(query.get('cloud_id'),'in.(vehicle-1,vehicle-2)')
+ assert.equal(remoteWins({updated_at:'2026-09-20T10:15:31.000Z'},'2026-09-20T10:15:30.000Z'),true)
+ assert.equal(remoteWins({updated_at:'2026-09-20T10:15:29.000Z'},'2026-09-20T10:15:30.000Z'),false)
+})
 
 test('Android keeps one local database bound to its Cloud account',()=>{
  assert.equal(assertCloudOwner('','account-1'),'account-1')
