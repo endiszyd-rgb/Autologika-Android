@@ -1,4 +1,12 @@
-# Autologika Android 0.15.2
+# Autologika Android 0.16.0
+
+## Nowe w 0.16.0
+
+- moduł Finanse / KPI z obrotem, wpłatami, marżą i należnościami,
+- edycja uzgodnionej ceny końcowej zlecenia z powodem korekty,
+- wspólna cena końcowa dla salda i rentowności na PC oraz Androidzie,
+- usuwanie błędnie dodanych płatności i części w Centrum zlecenia,
+- bezpośrednie przejście z pozycji finansowej do właściwego zlecenia.
 
 ## Nowe w 0.15.2
 
