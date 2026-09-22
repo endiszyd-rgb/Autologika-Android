@@ -1,4 +1,14 @@
-# Autologika Android 0.18.0
+# Autologika Android 0.19.0
+
+## Nowe w 0.19.0
+
+- wspólna, czytelna wyszukiwarka danych w mobilnych modułach warsztatu,
+- wyszukiwanie klientów po nazwie, firmie, telefonie i adresie e-mail,
+- wyszukiwanie pojazdów po rejestracji, VIN, marce, modelu i silniku,
+- filtrowanie tablicy workflow bez utraty podziału na etapy,
+- szybkie odnajdywanie zlecenia bezpośrednio w Centrum zlecenia,
+- wyszukiwanie odporne na wielkość liter, polskie znaki, spacje i myślniki,
+- liczniki widocznych wyników oraz przycisk czyszczenia filtra.
 
 ## Nowe w 0.18.0
 
