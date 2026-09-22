@@ -1,4 +1,14 @@
-# Autologika Android 0.16.0
+# Autologika Android 0.17.0
+
+## Nowe w 0.17.0
+
+- przebudowane Centrum zlecenia z sześcioma czytelnymi zakładkami zamiast jednego długiego ekranu,
+- pasek postępu prowadzący kolejno przez diagnozę, akceptację, części, zakres prac, czas, QC, płatność i wydanie,
+- jedna konkretna podpowiedź następnego działania z bezpośrednim przejściem do właściwego modułu,
+- podstawowa diagnoza jako krótki opis usterki oraz osobna, rozwijana diagnostyka elektroniczna,
+- liczniki otwartych części, działającego timera, wartości, wpłat i czasu pracy na ekranie przeglądu,
+- wydanie pojazdu dopiero po ukończeniu przebiegu i ustawieniu statusu `GOTOWE`,
+- aktualne wersje poprawek Expo SDK 57.
 
 ## Nowe w 0.16.0
 
