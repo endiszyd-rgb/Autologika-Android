@@ -2,13 +2,13 @@
   "expo": {
     "name": "Autologika",
     "slug": "autologika-android",
-    "version": "0.19.0",
+    "version": "0.20.0",
     "icon": "./assets/app-icon.png",
     "orientation": "landscape",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "pl.autologika.mobile",
-      "versionCode": 33,
+      "versionCode": 34,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#080a0d"

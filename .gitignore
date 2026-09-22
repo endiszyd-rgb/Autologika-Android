@@ -11,6 +11,7 @@ dist-finance-check/
 dist-order-center-check/
 dist-update-check/
 dist-search-check/
+dist-ui-020-check/
 release/
 *.apk
 *.aab

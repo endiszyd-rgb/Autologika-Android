@@ -1,4 +1,12 @@
-# Autologika Android 0.19.0
+# Autologika Android 0.20.0
+
+## Nowe w 0.20.0
+
+- profesjonalny, ciemny system wizualny z warstwowym tłem SVG, głębszymi panelami i wyraźniejszą hierarchią,
+- animowane przyciski, wejścia elementów i dopracowana nawigacja boczna,
+- przebudowany Workflow z polskimi nazwami etapów, licznikami, blokadami i opisanymi akcjami,
+- naprawione kodowanie polskich znaków w całej aplikacji,
+- automatyczny test chroniący interfejs przed ponownym pojawieniem się uszkodzonych tekstów.
 
 ## Nowe w 0.19.0
 
