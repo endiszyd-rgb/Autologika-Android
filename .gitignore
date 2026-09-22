@@ -9,6 +9,7 @@ dist-sync-check/
 dist-conflict-check/
 dist-finance-check/
 dist-order-center-check/
+dist-update-check/
 release/
 *.apk
 *.aab

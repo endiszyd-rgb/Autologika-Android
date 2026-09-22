@@ -1,6 +1,6 @@
 {
   "name": "autologika-android",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -13,10 +13,12 @@
   "dependencies": {
     "buffer": "^6.0.3",
     "expo": "~57.0.24",
+    "expo-application": "~57.0.3",
     "expo-asset": "~57.0.18",
     "expo-camera": "~57.0.5",
     "expo-file-system": "~57.0.7",
     "expo-image-picker": "~57.0.19",
+    "expo-intent-launcher": "~57.0.1",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.21",
     "expo-speech-recognition": "^57.0.0",

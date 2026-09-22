@@ -1,4 +1,13 @@
-# Autologika Android 0.17.0
+# Autologika Android 0.18.0
+
+## Nowe w 0.18.0
+
+- sprawdzanie najnowszej wersji bezpośrednio w `Ustawieniach`,
+- bezpieczne porównywanie numerów wersji z najnowszym wydaniem GitHub,
+- pobieranie właściwego pliku APK z widocznym postępem,
+- kontrola kompletności pobranego instalatora przed uruchomieniem,
+- otwieranie systemowego instalatora Android oraz szybkie przejście do zgody na instalację z tego źródła,
+- informacje o wydaniu widoczne przed pobraniem aktualizacji.
 
 ## Nowe w 0.17.0
 
