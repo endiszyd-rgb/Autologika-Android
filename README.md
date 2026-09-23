@@ -1,4 +1,13 @@
-# Autologika Android 0.22.0
+# Autologika Android 0.23.0
+
+## Nowe w 0.23.0
+
+- szybkie przyjęcie rozpoczyna się od wyszukania auta po rejestracji, VIN, marce, modelu, właścicielu lub telefonie,
+- istniejący pojazd dostaje nowe zlecenie w swojej historii bez tworzenia duplikatu klienta i auta,
+- skan dowodu automatycznie rozpoznaje pojazd zapisany już w bazie,
+- nowe auto można przyjąć bez właściciela i przypisać klienta później,
+- przebieg istniejącego pojazdu można zaktualizować bezpośrednio podczas przyjęcia,
+- przebudowany ekran wyboru pojazdu ma czytelne karty, wyraźny stan wyboru i mobilny układ.
 
 ## Nowe w 0.22.0
 
