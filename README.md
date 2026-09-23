@@ -1,4 +1,14 @@
-# Autologika Android 0.26.0
+# Autologika Android 0.27.0
+
+## Nowe w 0.27.0
+
+- przebudowany mobilny terminarz z czytelnym planerem wizyt i stanowisk,
+- prosty formularz daty i godzin zamiast ręcznego wpisywania pełnych wartości ISO,
+- skróty Dzisiaj, Jutro i Pojutrze oraz obsługa wizyt przechodzących na kolejny dzień,
+- grupowanie terminów według dnia i chronologiczne sortowanie godzin,
+- edycja, usuwanie, wyszukiwanie oraz prowadzenie statusu wizyty,
+- powiązanie terminu ze zleceniem i szybkie przejście do Centrum zlecenia,
+- statusy terminarza zgodne z wersją PC i synchronizacją chmurową.
 
 ## Nowe w 0.26.0
 

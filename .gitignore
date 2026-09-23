@@ -18,6 +18,7 @@ dist-intake-check/
 dist-owner-check/
 dist-dossier-check/
 dist-customer-check/
+dist-schedule-check/
 release/
 *.apk
 *.aab
