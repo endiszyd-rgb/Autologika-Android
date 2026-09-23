@@ -1,4 +1,14 @@
-# Autologika Android 0.24.0
+# Autologika Android 0.25.0
+
+## Nowe w 0.25.0
+
+- nowa kartoteka pojazdu z właścicielem, VIN-em, silnikiem, przebiegiem i wartością wykonanych prac,
+- historia wszystkich wizyt ułożona od najnowszej wraz ze statusem, datą i wartością zlecenia,
+- szybkie przejście z historii bezpośrednio do Centrum zlecenia,
+- tworzenie kolejnego zlecenia dla wybranego auta bez ponownego wybierania pojazdu i klienta,
+- bezpośredni kontakt telefoniczny i e-mailowy z właścicielem,
+- rozbudowane wyszukiwanie po aucie, właścicielu, telefonie oraz wcześniejszych pracach,
+- czytelne karty pojazdów pokazujące aktywne zlecenia, liczbę wizyt, przebieg i łączną wartość historii.
 
 ## Nowe w 0.24.0
 

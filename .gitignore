@@ -16,6 +16,7 @@ dist-responsive-check/
 dist-order-part-check/
 dist-intake-check/
 dist-owner-check/
+dist-dossier-check/
 release/
 *.apk
 *.aab
