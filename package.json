@@ -8,6 +8,7 @@
     "android": "expo run:android",
     "test": "node --experimental-default-type=module --test tests/*.test.mjs",
     "check": "npx expo-doctor",
+    "check:release-version": "node scripts/verify-release-version.mjs",
     "build:apk": "eas build -p android --profile preview"
   },
   "dependencies": {
