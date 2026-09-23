@@ -1,4 +1,12 @@
-# Autologika Android 0.20.0
+# Autologika Android 0.21.0
+
+## Nowe w 0.21.0
+
+- pełna obsługa orientacji pionowej i poziomej,
+- responsywny układ bez wymuszonej szerokości i przewijania całej aplikacji na boki,
+- kompaktowy panel najważniejszych modułów oraz rozbudowane menu „Więcej” na telefonach,
+- lepsze dopasowanie Centrum zlecenia, kart, formularzy i skanera do węższych ekranów,
+- poprawne polskie komunikaty uprawnień do mikrofonu i rozpoznawania mowy.
 
 ## Nowe w 0.20.0
 
