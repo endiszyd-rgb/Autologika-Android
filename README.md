@@ -1,4 +1,13 @@
-# Autologika Android 0.23.0
+# Autologika Android 0.24.0
+
+## Nowe w 0.24.0
+
+- wybór istniejącego właściciela podczas przyjmowania nowego auta,
+- wyszukiwanie klienta po nazwie, firmie, telefonie i adresie e-mail bez opuszczania przyjęcia,
+- trzy czytelne warianty: bez właściciela, istniejący klient lub nowy klient,
+- bezpośrednie dodawanie klientów w module `Klienci`,
+- walidacja danych klienta i ochrona przed duplikatami telefonu oraz adresu e-mail,
+- dane wybranego właściciela są od razu zapisywane w pojeździe i nowym zleceniu.
 
 ## Nowe w 0.23.0
 

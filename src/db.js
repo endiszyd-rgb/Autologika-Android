@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite'
 import * as FileSystem from 'expo-file-system/legacy'
 import {ORDER_CHILD_TYPES,relatedDeletionRows} from './deletion-graph.js'
 import {recordId,sameRecordId} from './record-id.js'
+import {customerPayload,duplicateCustomer} from './customer-model.js'
 
 let dbPromise
 export function db(){ if(!dbPromise)dbPromise=SQLite.openDatabaseAsync('autologika-mobile.db'); return dbPromise }
@@ -35,11 +36,15 @@ const clean=value=>String(value??'').trim()
 const normalizePlate=value=>clean(value).replace(/\s+/g,' ').toUpperCase()
 const normalizeVin=value=>clean(value).replace(/\s+/g,'').toUpperCase()
 const optionalNumber=(value,min,max,label)=>{if(value===''||value===null||value===undefined)return null;const number=Number(value);if(!Number.isFinite(number)||number<min||number>max)throw new Error(`${label}: nieprawidłowa wartość.`);return number}
+export async function createCustomerGraph(input){
+ const payload=customerPayload(input),customers=await list('customers'),duplicate=duplicateCustomer(customers,payload)
+ if(duplicate)throw new Error(`Klient z tym ${payload.email&&String(duplicate.payload.email||'').toLocaleLowerCase('pl-PL')===payload.email?'adresem e-mail':'numerem telefonu'} już istnieje.`)
+ const id=uid();await put('customers',id,payload);return {id,payload}
+}
 export async function updateCustomerGraph(id,input){
  const current=await get('customers',id);if(!current)throw new Error('Klient już nie istnieje.')
- const payload={...current.payload,name:clean(input.name),phone:clean(input.phone),email:clean(input.email).toLowerCase(),company:clean(input.company),notes:clean(input.notes)}
- if(!payload.name)throw new Error('Wpisz nazwę lub imię klienta.')
- if(payload.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email))throw new Error('Podaj prawidłowy adres e-mail.')
+ const payload={...current.payload,...customerPayload(input)},customers=await list('customers'),duplicate=duplicateCustomer(customers,payload,id)
+ if(duplicate)throw new Error(`Inny klient używa już tego ${payload.email&&String(duplicate.payload.email||'').toLocaleLowerCase('pl-PL')===payload.email?'adresu e-mail':'numeru telefonu'}.`)
  await patch('customers',id,payload)
  const [vehicles,orders]=await Promise.all([list('vehicles'),list('orders')]),vehicleIds=new Set(vehicles.filter(x=>sameRecordId(x.payload.customer_cloud_id,id)).map(x=>recordId(x.cloud_id)))
  for(const order of orders.filter(x=>vehicleIds.has(recordId(x.payload.vehicle_cloud_id))))await patch('orders',order.cloud_id,{customer:payload.name})

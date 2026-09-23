@@ -15,6 +15,7 @@ dist-ui-020-check/
 dist-responsive-check/
 dist-order-part-check/
 dist-intake-check/
+dist-owner-check/
 release/
 *.apk
 *.aab

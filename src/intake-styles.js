@@ -19,5 +19,12 @@ export default StyleSheet.create({
  selectedTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
  selectedPlate:{color:'#f4f8f1',fontSize:27,fontWeight:'950',letterSpacing:1,marginTop:4},
  selectedName:{color:'#c9e7b2',fontSize:15,fontWeight:'850',marginTop:8,marginBottom:4},
+ ownerBox:{marginTop:12,marginBottom:14,padding:14,borderWidth:1,borderColor:'#34443a',borderRadius:13,backgroundColor:'#0a100c'},
+ ownerHint:{color:'#829087',fontSize:10,lineHeight:16,padding:10,borderLeftWidth:2,borderLeftColor:'#52684c',backgroundColor:'#101712'},
+ customer:{minHeight:64,flexDirection:'row',alignItems:'center',gap:11,padding:10,borderWidth:1,borderColor:'#334139',borderRadius:10,backgroundColor:'#111813'},
+ customerMark:{width:36,height:36,borderRadius:18,alignItems:'center',justifyContent:'center',backgroundColor:'#1d2a20',borderWidth:1,borderColor:'#52684c'},
+ customerMarkText:{color:'#b8f07b',fontSize:13,fontWeight:'950'},
+ customerSelected:{minHeight:76,flexDirection:'row',alignItems:'center',gap:12,padding:13,borderWidth:1,borderColor:'#5e784f',borderRadius:11,backgroundColor:'#111a13'},
+ customerName:{color:'#edf5e8',fontSize:17,fontWeight:'900',marginTop:4,marginBottom:3},
  orderBlock:{marginTop:18,paddingTop:17,borderTopWidth:1,borderTopColor:'#304037'}
 })
