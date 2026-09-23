@@ -13,6 +13,7 @@ dist-update-check/
 dist-search-check/
 dist-ui-020-check/
 dist-responsive-check/
+dist-order-part-check/
 release/
 *.apk
 *.aab

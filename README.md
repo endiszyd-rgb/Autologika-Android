@@ -1,4 +1,12 @@
-# Autologika Android 0.21.0
+# Autologika Android 0.22.0
+
+## Nowe w 0.22.0
+
+- skanowanie EAN, UPC i GTIN bezpośrednio w zakładce Części w Centrum zlecenia,
+- automatyczne wyszukiwanie najpierw w magazynie, później w pamięci kodów i katalogach online,
+- automatyczne uzupełnianie nazwy, producenta, numeru katalogowego, OE, zamienników i dopasowania,
+- zapis danych katalogowych oraz źródła razem z częścią przypisaną do zlecenia,
+- obsługa skanera Zebra i aparatu oraz automatyczne rozpoczęcie wyszukiwania po pełnym kodzie.
 
 ## Nowe w 0.21.0
 
