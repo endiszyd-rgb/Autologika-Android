@@ -1,4 +1,13 @@
-# Autologika Android 0.25.0
+# Autologika Android 0.26.0
+
+## Nowe w 0.26.0
+
+- nowa kartoteka klienta łącząca jego dane, pojazdy i pełną historię warsztatową,
+- czytelne podsumowanie liczby aut, wizyt, aktywnych zleceń i wartości wykonanych prac,
+- szybkie połączenie telefoniczne oraz wiadomość e-mail bezpośrednio z profilu klienta,
+- dodanie kolejnego pojazdu z automatycznym przypisaniem właściciela,
+- otwieranie wcześniejszych wizyt w Centrum zlecenia,
+- wyszukiwanie klientów także po pojeździe, rejestracji i nazwie wcześniejszej pracy.
 
 ## Nowe w 0.25.0
 
