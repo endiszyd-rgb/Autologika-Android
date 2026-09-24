@@ -1,4 +1,17 @@
-# Autologika Android 0.27.0
+# Autologika Android 0.29.0
+
+## Nowe w 0.29.0
+
+- aktywne zlecenia z Centrum Zlecenia są widoczne bezpośrednio podczas dodawania wizyty,
+- karty wyboru pokazują rejestrację, pojazd, klienta, temat i zapisany zakres prac,
+- wyszukiwanie zleceń działa po aucie, kliencie, temacie oraz pozycji naprawy,
+- wybranie zlecenia automatycznie powiązuje wizytę i uzupełnia jej tytuł,
+- zakres prac jest widoczny także na zapisanej wizycie.
+
+## Nowe w 0.28.0
+
+- poprawione wyświetlanie numeru rejestracyjnego, marki i modelu w zleceniach,
+- spójne dane pojazdu na listach, w Centrum Zlecenia, workflow i terminarzu.
 
 ## Nowe w 0.27.0
 

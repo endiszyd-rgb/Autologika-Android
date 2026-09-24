@@ -1,3 +1,7 @@
+import {matchesSearch} from './mobile-search.js'
+import {resolveOrderVehicle} from './order-vehicle.js'
+import {sameRecordId} from './record-id.js'
+
 const pad=value=>String(value).padStart(2,'0')
 
 export function localDate(value=new Date()){
@@ -43,3 +47,15 @@ export function nextAppointmentStatus(status){const index=appointmentStatuses.in
 export function appointmentStatusLabel(status){return ({PLAN:'PLAN',POTWIERDZONY:'POTWIERDZONY',W_TRAKCIE:'W TRAKCIE',ZAKONCZONY:'ZAKOŃCZONY',ANULOWANY:'ANULOWANY'})[status]||String(status||'PLAN').replaceAll('_',' ')}
 
 export function appointmentSearch(row,order){return {...(row.payload||{}),order:order?.payload||{}}}
+
+const closedOrder=status=>['WYDANE','CLOSED','DONE'].includes(String(status||'').toUpperCase())
+const partKind=kind=>['CZESC','CZĘŚĆ','PART'].includes(String(kind||'').toUpperCase())
+
+export function scheduleOrderChoices(orders=[],vehicles=[],items=[],query=''){
+ return (orders||[]).filter(row=>!closedOrder(row.payload?.status)&&!row.payload?.archived_at).map(order=>{
+  const payload=order.payload||{},vehicle=resolveOrderVehicle(payload,vehicles).display
+  const work=(items||[]).filter(item=>sameRecordId(item.payload?.order_cloud_id,order.cloud_id)&&!partKind(item.payload?.kind)).map(item=>String(item.payload?.work_name||item.payload?.name||'').trim()).filter(Boolean)
+  const choice={order,vehicle,plate:vehicle.plate||payload.plate||'',vehicleName:[vehicle.make||payload.make,vehicle.model||payload.model].filter(Boolean).join(' '),customer:payload.customer||'',title:payload.title||'Zlecenie warsztatowe',workSummary:work.slice(0,4).join(' • '),workCount:work.length}
+  return choice
+ }).filter(choice=>matchesSearch(choice,query))
+}
