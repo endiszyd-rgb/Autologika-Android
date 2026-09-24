@@ -1,6 +1,7 @@
 import {matchesSearch} from './mobile-search.js'
 import {resolveOrderVehicle} from './order-vehicle.js'
 import {sameRecordId} from './record-id.js'
+import {DEFAULT_WORKSHOP_LAYOUT,normalizeWorkshopLayout} from './workshop-settings.js'
 
 const pad=value=>String(value).padStart(2,'0')
 
@@ -14,11 +15,12 @@ export function localTime(value=new Date()){
  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-export function appointmentForm(row,now=new Date()){
- const start=row?.payload?.start_at?new Date(row.payload.start_at):new Date(now.getTime()+60*60*1000)
+export function appointmentForm(row,now=new Date(),workshop=DEFAULT_WORKSHOP_LAYOUT){
+ const layout=normalizeWorkshopLayout(workshop),start=row?.payload?.start_at?new Date(row.payload.start_at):new Date(now.getTime()+60*60*1000)
+ if(!row?.payload?.start_at&&(start.getHours()<layout.openingHour||start.getHours()>=layout.closingHour)){if(start.getHours()>=layout.closingHour)start.setDate(start.getDate()+1);start.setHours(layout.openingHour,0,0,0)}
  start.setMinutes(Math.ceil(start.getMinutes()/15)*15,0,0)
- const end=row?.payload?.end_at?new Date(row.payload.end_at):new Date(start.getTime()+60*60*1000)
- return {order_cloud_id:row?.payload?.order_cloud_id||'',title:row?.payload?.title||'',date:localDate(start),start_time:localTime(start),end_date:localDate(end),end_time:localTime(end),bay:row?.payload?.bay||'Stanowisko 1',status:row?.payload?.status||'PLAN',notes:row?.payload?.notes||''}
+ const end=row?.payload?.end_at?new Date(row.payload.end_at):new Date(start.getTime()+layout.defaultAppointmentMinutes*60000)
+ return {order_cloud_id:row?.payload?.order_cloud_id||'',title:row?.payload?.title||'',date:localDate(start),start_time:localTime(start),end_date:localDate(end),end_time:localTime(end),bay:row?.payload?.bay||layout.bays[0],status:row?.payload?.status||'PLAN',notes:row?.payload?.notes||''}
 }
 
 export function appointmentPayload(form){

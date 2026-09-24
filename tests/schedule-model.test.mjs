@@ -26,6 +26,14 @@ test('status wizyty przechodzi przez kolejne etapy',()=>{
  assert.equal(nextAppointmentStatus('ZAKONCZONY'),'ZAKONCZONY')
 })
 
+test('nowa wizyta korzysta z godzin, długości i stanowiska warsztatu',()=>{
+ const form=appointmentForm(undefined,new Date('2026-09-23T19:20:00+02:00'),{bays:['Podnośnik A'],openingHour:7,closingHour:18,defaultAppointmentMinutes:90})
+ assert.equal(form.date,'2026-09-24')
+ assert.equal(form.start_time,'07:00')
+ assert.equal(form.end_time,'08:30')
+ assert.equal(form.bay,'Podnośnik A')
+})
+
 test('nowa wizyta pokazuje aktywne zlecenia z autem, klientem i zakresem prac',()=>{
  const orders=[
   {cloud_id:'o1',payload:{vehicle_cloud_id:'v1',title:'Naprawa hamulców',customer:'Jan Kowalski',status:'NAPRAWA'}},
