@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useRef,useState} from 'react'
 import {Animated,Easing,Pressable,StyleSheet,Text,View,useWindowDimensions} from 'react-native'
 import Svg,{Circle,Line} from 'react-native-svg'
 import {list} from './db'
+import {resolveOrderVehicle} from './order-vehicle'
 
 const T={bg:'#090b0d',panel:'#111512',panel2:'#0d110e',line:'#2a342c',lineSoft:'#202722',text:'#edf3e9',muted:'#879187',lime:'#b9ef79',limeSoft:'#cbe4ad',gold:'#d5ad54',danger:'#e0a36b'}
 const POSITIONS=[[26,23],[67,19],[78,48],[66,74],[31,77],[17,51],[48,31],[48,68]]
@@ -45,7 +46,7 @@ export default function WorkshopDashboard({tick,openCenter,navigate}){
  const{width}=useWindowDimensions();const small=width<1120
  const[customers,setCustomers]=useState([]),[vehicles,setVehicles]=useState([]),[orders,setOrders]=useState([]),[payments,setPayments]=useState([])
  useEffect(()=>{let live=true;Promise.all([list('customers'),list('vehicles'),list('orders'),list('payments')]).then(([c,v,o,p])=>{if(live){setCustomers(c);setVehicles(v);setOrders(o);setPayments(p)}});return()=>{live=false}},[tick])
- const active=useMemo(()=>orders.filter(x=>x.payload.status!=='WYDANE'),[orders])
+ const active=useMemo(()=>orders.filter(x=>x.payload.status!=='WYDANE').map(order=>({...order,payload:{...order.payload,...resolveOrderVehicle(order.payload,vehicles).display}})),[orders,vehicles])
  const blocked=useMemo(()=>active.filter(x=>x.payload.wait_state&&x.payload.wait_state!=='BRAK'),[active])
  const paid=useMemo(()=>payments.reduce((sum,x)=>sum+Number(x.payload.amount||0),0),[payments])
  const statusCounts=useMemo(()=>Object.fromEntries(STAGES.map(([key])=>[key,active.filter(x=>x.payload.status===key).length])),[active])

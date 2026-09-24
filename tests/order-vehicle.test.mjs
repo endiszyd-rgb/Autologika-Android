@@ -28,3 +28,21 @@ test('matches synchronized identifiers regardless of their serialized type',()=>
   assert.equal(result.vehicle.cloud_id,'123')
   assert.equal(result.missing,false)
 })
+
+test('supports legacy relation and registration field names from older sync records',()=>{
+  const result=resolveOrderVehicle({vehicle_id:42},[{cloud_id:'vehicle-42',payload:{id:42,registration_number:'PO 42XYZ',brand:'Skoda',vehicle_model:'Octavia'}}])
+  assert.equal(result.vehicle.cloud_id,'vehicle-42')
+  assert.equal(result.display.plate,'PO 42XYZ')
+  assert.equal(result.display.make,'Skoda')
+  assert.equal(result.display.model,'Octavia')
+  assert.equal(result.repairCloudId,'vehicle-42')
+})
+
+test('reads vehicle identity from a serialized snapshot when the relation is unavailable',()=>{
+  const result=resolveOrderVehicle({vehicle_snapshot:JSON.stringify({plate:'PK 9TEST',make:'Toyota',model:'Yaris',engine:'1.5'})},[])
+  assert.equal(result.display.plate,'PK 9TEST')
+  assert.equal(result.display.make,'Toyota')
+  assert.equal(result.display.model,'Yaris')
+  assert.equal(result.display.engine,'1.5')
+  assert.equal(result.missing,false)
+})
