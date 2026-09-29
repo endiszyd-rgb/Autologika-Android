@@ -137,15 +137,17 @@ test('geometria wierszy działa bez nagłówków przy zmiennym kącie i scala ce
  add('KLOCKI',460,390,85);add('HAMULCOWE',550,390,120)
  add('1.00',710,390,55);add('102,00',1130,390,65)
  add('Razem',850,520,75)
+ add('Wartość',120,600,90);add('dokumentu:',215,600,100);add('345.98',1100,600,70)
  const document=parseSpatialDeliveryDocument({
   width:1200,height:1000,
-  text:'XENO-ŚWIST Danuta Świst\nWydanie zewnętrzne nr: 3/WZ/2026/12446\nWartość dokumentu: 345.98',
+  text:'XENO-ŚWIST Danuta Świst\nWydanie zewnętrzne nr: 3/WZ/2026/12446\nWartość dokumentu: 349.98',
   elements:words,
  })
  assert.deepEqual(document.items.map(item=>[item.part_no,item.name,item.qty,item.gross_total,item.unit_cost]),[
   ['KTFEB22902','TARCZA HAMULCOWA AUDI',2,243.98,121.99],
   ['KTFEB16502','KLOCKI HAMULCOWE',1,102,102],
  ])
+ assert.equal(document.gross_total,345.98)
  assert.equal(document.warnings.some(warning=>warning.startsWith('Nie rozpoznano pozycji')),false)
 })
 
@@ -162,6 +164,19 @@ test('suma dokumentu obejmuje ceny końcowe tylko zaznaczonych pozycji',()=>{
   {enabled:false,qty:'4',gross_total:'99,99'},
  ])
  assert.deepEqual(totals,{count:2,qty:3,gross:64.02})
+})
+
+test('wartość dokumentu rozlicza jednogroszową różnicę zaokrąglenia',()=>{
+ const document=parseDeliveryDocument(`
+Wydanie zewnętrzne nr: 3/WZ/2026/12446
+ABC100 FILTR OLEJU 1.00 SZT 81.29 81.29 23 18.70 99.99
+ABC200 FILTR PALIWA 1.00 SZT 65.04 65.04 23 14.96 80.00
+Wartość dokumentu: 180.00
+`)
+ assert.equal(document.gross_total,180)
+ assert.equal(deliveryDocumentTotals(document.items).gross,180)
+ assert.equal(document.items.at(-1).gross_total,80.01)
+ assert.equal(document.warnings.some(warning=>warning.startsWith('Suma odczytanych pozycji')),false)
 })
 
 test('identyfikator dokumentu jest stabilny',()=>{

@@ -31,3 +31,9 @@ test('ekran zleceń ma zdefiniowany panel tworzenia zlecenia',()=>{
  assert.match(app,/function NewOrderPanel\s*\(/)
  assert.match(app,/<NewOrderPanel refresh=\{refresh\} openCenter=\{openCenter\}\/>/)
 })
+
+test('aparat dokumentów uruchamia lampę dla podglądu i zdjęcia',()=>{
+ const screen=readFileSync('src/delivery-document-screen.js','utf8')
+ assert.match(screen,/<CameraView[^>]+flash="on"[^>]+enableTorch/)
+ assert.match(screen,/requestCameraPermissionsAsync/)
+})

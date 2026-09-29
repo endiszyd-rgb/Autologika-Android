@@ -14,6 +14,25 @@ export function deliveryDocumentTotals(items=[]){
   }),{count:0,qty:0,gross:0})
 }
 
+function closestDocumentTotal(rowsGross,...values){
+  const candidates=[...new Set(values.flat().map(amount).filter(value=>value>0))]
+  if(!candidates.length)return rowsGross
+  if(rowsGross<=0)return candidates[0]
+  return candidates.sort((a,b)=>Math.abs(a-rowsGross)-Math.abs(b-rowsGross))[0]
+}
+
+function reconcileDocumentRounding(items,total){
+  const current=deliveryDocumentTotals(items),difference=round(amount(total)-current.gross)
+  if(!items.length||!difference||Math.abs(difference)>.1)return items
+  const index=items.map(item=>item?.enabled!==false).lastIndexOf(true)
+  if(index<0)return items
+  return items.map((item,itemIndex)=>{
+    if(itemIndex!==index)return item
+    const gross_total=round(amount(item.gross_total)+difference),qty=amount(item.qty)
+    return{...item,gross_total,unit_cost:qty>0?round(gross_total/qty):item.unit_cost,rounding_adjustment:difference}
+  })
+}
+
 export const normalizePartNumber=value=>clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Ł/gi,'L').replace(/^[^A-Z0-9]+|[^A-Z0-9./-]+$/gi,'').toUpperCase()
 export const normalizeOcrText=value=>String(value||'').replace(/\r/g,'').replace(/[„”]/g,'"').replace(/(?<=\d):(?=\d{2}\b)/g,'.').replace(/\b(\d{1,6})[ \t]+(\d{2})\b/g,'$1.$2').replace(/[ \t]+/g,' ').split('\n').map(line=>line.trim()).filter(Boolean).join('\n')
 
@@ -94,7 +113,7 @@ export function parseDeliveryDocument(rawText){
   const documentIndex=lines.findIndex(line=>/(wydanie\s+zewn|faktura|paragon|dokument\s+dostaw)/i.test(line)),documentLine=lines[documentIndex]||''
   const document_no=documentLine.match(/(?:nr\s*[:.]?\s*)?([A-Z0-9]+(?:[\/-][A-Z0-9]+){2,})/i)?.[1]||''
   const dateLine=lines.find(line=>/(data\s+(dostaw|wystaw|wykon)|wydrukowano)/i.test(line))||'',date=dateLine.match(/(\d{1,2}[./-]\d{1,2}[./-]\d{4})/)?.[1]||''
-  const totalLine=lines.find(line=>/wartość\s+dokumentu/i.test(line))||'',totals=[...totalLine.matchAll(/\d+[.,]\d{2}/g)]
+  const totalLines=lines.filter(line=>/wartość\s+dokumentu|(?:razem|zapłacono).*(?:pln|\d+[.,]\d{2})/i.test(line))
   const items=[];let current=null
   for(const line of lines){
     if(/^(razem|w tym|wartość dokumentu|sposób zapłaty)/i.test(line))break
@@ -109,11 +128,14 @@ export function parseDeliveryDocument(rawText){
     const existing=items.find(item=>item.part_no===joined.part_no)
     if(!existing)items.push(joined)
   }
-  const rowsGross=round(items.reduce((sum,item)=>sum+item.gross_total,0)),gross_total=totals.length?amount(totals.at(-1)[0]):rowsGross,warnings=[]
+  const rowsGross=round(items.reduce((sum,item)=>sum+item.gross_total,0))
+  const totalCandidates=totalLines.map(line=>[...line.matchAll(/\d+[.,]\d{2}/g)].at(-1)?.[0]).filter(Boolean)
+  const gross_total=closestDocumentTotal(rowsGross,totalCandidates)
+  const reconciledItems=reconcileDocumentRounding(items,gross_total),reconciledGross=deliveryDocumentTotals(reconciledItems).gross,warnings=[]
   if(!items.length)warnings.push('Nie rozpoznano pozycji tabeli. Zrób zdjęcie prosto nad kartką albo dodaj wiersze ręcznie.')
   if(items.some(item=>item.confidence==='CHECK'))warnings.push('Co najmniej jeden numer lub cena wymaga sprawdzenia z dokumentem.')
-  if(gross_total>0&&Math.abs(gross_total-rowsGross)>.1)warnings.push(`Suma odczytanych pozycji (${rowsGross.toFixed(2)} zł) różni się od wartości dokumentu (${gross_total.toFixed(2)} zł).`)
-  return{supplier_name:supplierFrom(lines,documentIndex),document_no,document_date:date?date.split(/[./-]/).reverse().join('-'):'',currency:'PLN',gross_total,items,warnings,raw_text}
+  if(gross_total>0&&Math.abs(gross_total-reconciledGross)>.1)warnings.push(`Suma odczytanych pozycji (${reconciledGross.toFixed(2)} zł) różni się od wartości dokumentu (${gross_total.toFixed(2)} zł).`)
+  return{supplier_name:supplierFrom(lines,documentIndex),document_no,document_date:date?date.split(/[./-]/).reverse().join('-'):'',currency:'PLN',gross_total,items:reconciledItems,warnings,raw_text}
 }
 
 const spatialNumber=value=>Number.isFinite(Number(value))?Number(value):0
@@ -322,15 +344,20 @@ export function parseSpatialDeliveryDocument(result={}){
   // Prefer the interpretation that recovered the most physical rows. A single
   // correctly read header must not let a partial fixed-column result hide the
   // remaining rows recovered from the document's measured row geometry.
-  const items=[fixed,geometric,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
-  const gross_total=linear.gross_total||visual.gross_total
-  const itemTotals=deliveryDocumentTotals(items)
+  const recoveredItems=[fixed,geometric,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
+  const itemTotals=deliveryDocumentTotals(recoveredItems)
+  // ML Kit exposes both a linear text stream and positioned words. A character
+  // may be confused in only one representation (for example 180.00 as 184.06),
+  // so choose the document total that agrees best with the recovered rows.
+  const gross_total=closestDocumentTotal(itemTotals.gross,linear.gross_total,visual.gross_total)
+  const items=reconcileDocumentRounding(recoveredItems,gross_total)
+  const reconciledTotals=deliveryDocumentTotals(items)
   const warnings=[...new Set([
     ...(items.length?visual.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')):visual.warnings),
     ...linear.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')),
   ].filter(warning=>!warning.startsWith('Suma odczytanych pozycji')))]
   if(!items.length)warnings.unshift('Nie rozpoznano pozycji tabeli. Zrób zdjęcie prosto nad kartką i obejmij cały obszar od numerów katalogowych do cen brutto.')
-  if(gross_total>0&&Math.abs(gross_total-itemTotals.gross)>.1)warnings.push(`Suma odczytanych pozycji (${itemTotals.gross.toFixed(2)} zł) różni się od wartości dokumentu (${gross_total.toFixed(2)} zł).`)
+  if(gross_total>0&&Math.abs(gross_total-reconciledTotals.gross)>.1)warnings.push(`Suma odczytanych pozycji (${reconciledTotals.gross.toFixed(2)} zł) różni się od wartości dokumentu (${gross_total.toFixed(2)} zł).`)
   return{
     ...linear,
     supplier_name:linear.supplier_name||visual.supplier_name,

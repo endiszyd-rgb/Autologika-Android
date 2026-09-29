@@ -24,6 +24,7 @@ dist-delivery-check*/
 dist-phone-check/
 dist-orders-crash-check/
 dist-sum-check/
+dist-flash-check/
 release/
 *.apk
 *.aab
