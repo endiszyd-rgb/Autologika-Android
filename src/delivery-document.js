@@ -177,55 +177,89 @@ function cellAmount(words){
   return direct[0]?.value||0
 }
 
-function templatePageWidth(result,words){
-  const declared=spatialNumber(result.width)
-  const observed=Math.max(...words.map(word=>word.right),0)
-  return declared>0&&declared>=observed*.8?declared:observed
+function numericCells(words){
+  const ordered=[...words].sort((a,b)=>a.left-b.left),cells=[]
+  for(let index=0;index<ordered.length;index++){
+    const word=ordered[index],text=clean(word.text)
+    if(/^\d{1,6}[.,:]\d{2}$/.test(text)){cells.push({...word,value:amount(text)});continue}
+    const next=ordered[index+1],nextText=clean(next?.text)
+    const gap=next?next.left-word.right:Infinity
+    const sameLine=next&&Math.abs(centerY(next)-centerY(word))<=Math.max(word.bottom-word.top,next.bottom-next.top)*.8
+    if(/^\d{1,6}$/.test(text)&&/^\d{2}$/.test(nextText)&&sameLine&&gap<=Math.max(18,(word.bottom-word.top)*2.8)){
+      cells.push({left:word.left,right:next.right,top:Math.min(word.top,next.top),bottom:Math.max(word.bottom,next.bottom),value:amount(`${text}.${nextText}`)})
+      index++
+    }
+  }
+  return cells.filter(cell=>cell.value>0)
 }
 
-// Every XENO-SWIST WZ uses the same printed form. This fallback deliberately
-// does not depend on OCR reading the multi-line column headers. It uses their
-// fixed page proportions, which remain stable for camera photos and gallery
-// images even when ML Kit drops `Cena`, `Ilosc` or `Brutto` entirely.
-export function parseXenoTemplateTable(result={}){
+function rowCodeCandidates(row,index){
+  const ordered=[...row.words].sort((a,b)=>a.left-b.left),numbers=numericCells(ordered)
+  if(numbers.length<2)return[]
+  const firstNumber=numbers[0]
+  const candidates=[]
+  for(let start=0;start<ordered.length;start++){
+    if(ordered[start].left>=firstNumber.left)break
+    for(let length=1;length<=3&&start+length<=ordered.length;length++){
+      const slice=ordered.slice(start,start+length)
+      if(slice.at(-1).right>=firstNumber.left)break
+      const code=normalizePartNumber(slice.map(word=>word.text).join(''))
+      const between=ordered.filter(word=>word.left>slice.at(-1).right&&word.right<firstNumber.left)
+      if(!likelyPartToken(code)||!between.some(word=>/[A-ZĄĆĘŁŃÓŚŹŻ]{2}/i.test(word.text)))continue
+      candidates.push({row,index,code,left:slice[0].left,right:slice.at(-1).right,x:slice[0].left,numbers,words:slice})
+    }
+  }
+  return candidates
+}
+
+function strongestCodeColumn(candidates,observedWidth){
+  const tolerance=Math.max(24,observedWidth*.045),clusters=[]
+  for(const candidate of candidates){
+    let cluster=clusters.find(item=>Math.abs(item.x-candidate.x)<=tolerance)
+    if(!cluster){cluster={x:candidate.x,candidates:[]};clusters.push(cluster)}
+    cluster.candidates.push(candidate)
+    cluster.x=cluster.candidates.reduce((sum,item)=>sum+item.x,0)/cluster.candidates.length
+  }
+  return clusters.sort((a,b)=>{
+    const aRows=new Set(a.candidates.map(item=>item.index)).size,bRows=new Set(b.candidates.map(item=>item.index)).size
+    return bRows-aRows||b.candidates.length-a.candidates.length
+  })[0]
+}
+
+// Spatial fallback for sharp documents photographed at any angle. It learns
+// the catalogue-number column from repetition across physical rows, then reads
+// quantity and the rightmost amount relative to each row. No page percentage
+// or supplier-specific column coordinate is used.
+export function parseGeometricDeliveryTable(result={}){
   const words=spatialWords(result.elements)
   if(words.length<8)return[]
-  const width=templatePageWidth(result,words)
-  const height=spatialNumber(result.height)||Math.max(...words.map(word=>word.bottom),0)
-  if(width<=0||height<=0)return[]
+  const physicalRows=clusterCodeRows(words)
+  const candidates=physicalRows.flatMap((row,index)=>rowCodeCandidates(row,index))
+  if(!candidates.length)return[]
+  const observedWidth=Math.max(...words.map(word=>word.right))-Math.min(...words.map(word=>word.left))
+  const column=strongestCodeColumn(candidates,observedWidth)
+  if(!column)return[]
+  const distinctRows=new Set(column.candidates.map(item=>item.index)).size
+  if(distinctRows<2&&physicalRows.length>4)return[]
 
-  const codeBand=[width*.19,width*.36]
-  const nameBand=[width*.34,width*.57]
-  const qtyBand=[width*.52,width*.64]
-  const grossBand=[width*.84,width*.985]
-  const headerWords=words.filter(word=>/^(kod|nazwa|ilo|cena|warto)/i.test(folded(word.text)))
-  const headerAnchor=headerWords.filter(word=>/^(kod|nazwa|ilosc|cena)/i.test(folded(word.text))&&centerY(word)>height*.1&&centerY(word)<height*.42).sort((a,b)=>a.top-b.top)[0]
-  const headerY=headerAnchor
-    ? Math.max(...headerWords.filter(word=>Math.abs(centerY(word)-centerY(headerAnchor))<height*.055).map(word=>word.bottom),headerAnchor.bottom)
-    : height*.2
-  const totalWord=words.filter(word=>word.top>headerY&&word.left>width*.55&&/^(razem|wartosc)$/i.test(folded(word.text))).sort((a,b)=>a.top-b.top)[0]
-  const tableBottom=Math.min(totalWord?.top||height*.78,height*.82)
+  const anchors=[...new Set(column.candidates.map(item=>item.index))].map(index=>{
+    const choices=candidates.filter(item=>item.index===index)
+    return choices.sort((a,b)=>Math.abs(a.x-column.x)-Math.abs(b.x-column.x)||a.words.length-b.words.length||a.code.length-b.code.length)[0]
+  }).sort((a,b)=>a.row.y-b.row.y)
 
-  const possibleCodeWords=wordsInHorizontalBand(words,codeBand[0],codeBand[1])
-    .filter(word=>centerY(word)>headerY&&centerY(word)<tableBottom)
-  const codeRows=clusterCodeRows(possibleCodeWords)
-    .map(row=>{
-      const joined=row.words.sort((a,b)=>a.left-b.left).map(word=>word.text).join('').replace(/\s+/g,'')
-      return{...row,code:normalizePartNumber(joined)}
-    })
-    .filter(row=>likelyPartToken(row.code)&&!/^(?:B?10001|202\d|33101)$/i.test(row.code))
-
-  return codeRows.map((row,index)=>{
-    const previous=codeRows[index-1],next=codeRows[index+1]
-    const top=previous?(previous.y+row.y)/2:Math.max(headerY,row.y-row.height*1.1)
-    const bottom=next?(row.y+next.y)/2:tableBottom
-    const rowWords=words.filter(word=>centerY(word)>=top&&centerY(word)<bottom)
-    const name=rowWords.filter(word=>centerX(word)>=nameBand[0]&&centerX(word)<nameBand[1])
+  return anchors.map((anchor,index)=>{
+    const previous=anchors[index-1],next=anchors[index+1]
+    const top=previous?(previous.row.y+anchor.row.y)/2:anchor.row.y-anchor.row.height*1.15
+    const bottom=next?(anchor.row.y+next.row.y)/2:anchor.row.y+anchor.row.height*2.8
+    const body=words.filter(word=>centerY(word)>=top&&centerY(word)<bottom)
+    const anchorNumbers=numericCells(anchor.row.words.filter(word=>word.left>anchor.right))
+    if(anchorNumbers.length<2)return null
+    const qtyCell=anchorNumbers[0],grossCell=anchorNumbers.at(-1)
+    const name=body.filter(word=>word.left>anchor.right&&word.right<qtyCell.left)
       .sort((a,b)=>centerY(a)-centerY(b)||a.left-b.left).map(word=>word.text).join(' ').replace(/\s+/g,' ').trim()
-    const qty=cellAmount(wordsInHorizontalBand(rowWords,qtyBand[0],qtyBand[1]))
-    const gross_total=cellAmount(wordsInHorizontalBand(rowWords,grossBand[0],grossBand[1]))
+    const qty=qtyCell.value,gross_total=grossCell.value
     if(!name||qty<=0||gross_total<=0)return null
-    return{enabled:true,part_no:row.code,name,qty,unit_cost:round(gross_total/qty),net_unit_cost:0,net_total:0,vat_rate:23,vat_amount:0,gross_total,confidence:'GOOD',source_line:rowWords.sort((a,b)=>a.left-b.left).map(word=>word.text).join(' ')}
+    return{enabled:true,part_no:anchor.code,name,qty,unit_cost:round(gross_total/qty),net_unit_cost:0,net_total:0,vat_rate:23,vat_amount:0,gross_total,confidence:'GOOD',source_line:body.sort((a,b)=>a.top-b.top||a.left-b.left).map(word=>word.text).join(' ')}
   }).filter(Boolean)
 }
 
@@ -276,11 +310,11 @@ export function parseSpatialDeliveryDocument(result={}){
   const visual=parseDeliveryDocument(visualText)
   const linear=parseDeliveryDocument(result.text||'')
   const fixed=parseFixedSupplierTable(result)
-  const template=parseXenoTemplateTable(result)
+  const geometric=parseGeometricDeliveryTable(result)
   // Prefer the interpretation that recovered the most physical rows. A single
   // correctly read header must not let a partial fixed-column result hide the
-  // remaining rows recovered by the form-template fallback.
-  const items=[fixed,template,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
+  // remaining rows recovered from the document's measured row geometry.
+  const items=[fixed,geometric,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
   const warnings=[...new Set([
     ...(items.length?visual.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')):visual.warnings),
     ...linear.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')),

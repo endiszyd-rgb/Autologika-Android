@@ -123,7 +123,7 @@ Wartość dokumentu: 243.98
  assert.equal(operation.payload.unit_cost,121.99)
 })
 
-test('formularz XENO działa bez rozpoznanych nagłówków i scala cenę przeciętą linią tabeli',()=>{
+test('geometria wierszy działa bez nagłówków przy zmiennym kącie i scala cenę przeciętą linią',()=>{
  const words=[]
  const add=(text,left,top,width=60,height=20)=>words.push({text,left,top,right:left+width,bottom:top+height})
  // OCR telefonu nie zwrócił nagłówków tabeli. Zostały tylko komórki w ich
@@ -132,9 +132,10 @@ test('formularz XENO działa bez rozpoznanych nagłówków i scala cenę przeci�
  add('TARCZA',430,300,85);add('HAMULCOWA',430,326,125);add('AUDI',560,326,55)
  add('2',680,300,18);add('00',701,300,25)
  add('243',1100,300,42);add('98',1145,300,28)
- add('KTFEB16502',250,390,140)
- add('KLOCKI',430,390,85);add('HAMULCOWE',520,390,120)
- add('1.00',680,390,55);add('102,00',1100,390,75)
+ // Drugi wiersz jest przesunięty przez perspektywę zdjęcia.
+ add('KTFEB16502',280,390,140)
+ add('KLOCKI',460,390,85);add('HAMULCOWE',550,390,120)
+ add('1.00',710,390,55);add('102,00',1130,390,65)
  add('Razem',850,520,75)
  const document=parseSpatialDeliveryDocument({
   width:1200,height:1000,

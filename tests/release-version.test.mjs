@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import {readReleaseVersions,verifyReleaseVersion} from '../scripts/verify-release-version.mjs'
 
 test('wersja wydania jest zgodna w package, Expo i natywnym Gradle',()=>{
- const versions=verifyReleaseVersion('0.30.4')
- assert.deepEqual(versions,{packageVersion:'0.30.4',expoVersion:'0.30.4',expoCode:48,nativeVersion:'0.30.4',nativeCode:48})
+ const versions=verifyReleaseVersion('0.30.5')
+ assert.deepEqual(versions,{packageVersion:'0.30.5',expoVersion:'0.30.5',expoCode:49,nativeVersion:'0.30.5',nativeCode:49})
 })
 
 test('kontrola odrzuca tag inny niż wersja aplikacji',()=>{
- assert.throws(()=>verifyReleaseVersion('0.30.5'),/Niezgodne wersje/)
- assert.equal(readReleaseVersions().nativeCode,48)
+ assert.throws(()=>verifyReleaseVersion('0.30.6'),/Niezgodne wersje/)
+ assert.equal(readReleaseVersions().nativeCode,49)
 })
