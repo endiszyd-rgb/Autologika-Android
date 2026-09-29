@@ -16,7 +16,7 @@ test('rozpoznaje pozycje polskiego dokumentu dostawy',()=>{
  assert.equal(document.supplier_name,'XENO-ŚWIST Danuta Świst')
  assert.equal(document.document_no,'3/WZ/2025/16969')
  assert.equal(document.document_date,'2025-12-10')
- assert.deepEqual(document.items.map(item=>[item.part_no,item.qty,item.unit_cost]),[['KTCZETR1345',2,17.89],['KTMANHU726/2X',1,16.27]])
+ assert.deepEqual(document.items.map(item=>[item.part_no,item.qty,item.unit_cost]),[['KTCZETR1345',2,22.01],['KTMANHU726/2X',1,20.01]])
 })
 
 test('składa pozycje, gdy mobilny OCR rozdzieli kolumny tabeli na linie',()=>{
@@ -50,8 +50,8 @@ Razem: 51.99
 `
  const document=parseDeliveryDocument(wrapped)
  assert.deepEqual(document.items.map(item=>[item.part_no,item.name,item.qty,item.unit_cost,item.gross_total]),[
-  ['KTCZETR1345','USZCZELNIACZ PÓŁOSI F ORD',2,17.89,44.01],
-  ['KTMANHU726/2X','FILTR OLEJU',1,16.27,20.01],
+  ['KTCZETR1345','USZCZELNIACZ PÓŁOSI F ORD',2,22.01,44.01],
+  ['KTMANHU726/2X','FILTR OLEJU',1,20.01,20.01],
  ])
  assert.equal(document.warnings.some(warning=>warning.startsWith('Nie rozpoznano pozycji')),false)
 })
@@ -74,26 +74,28 @@ Razem: 212.00
  const document=parseDeliveryDocument(mixed)
  assert.deepEqual(document.items.map(item=>item.part_no),['KTCZETR1345','VLV5W30'])
  assert.equal(document.items[1].name,'XL III 5L OLEJ VALVOLINE XL-III SYN POWER 5W30 5L')
- assert.equal(document.items[1].unit_cost,136.58)
+ assert.equal(document.items[1].unit_cost,167.99)
 })
 
 test('odbudowuje wiersze tabeli z pozycji słów zwróconych przez ML Kit',()=>{
  const words=[]
  const add=(text,left,top,width=70,height=20)=>words.push({text,left,top,right:left+width,bottom:top+height})
- add('Kod',100,100);add('Nazwa',300,100);add('Ilość',650,100);add('Cena',800,100);add('Netto',900,100);add('VAT',1000,100);add('Brutto',1120,100)
- add('KTCZETR1345',100,160,150);add('USZCZELNIACZ',300,162,150);add('PÓŁOSI',460,162,90);add('FORD',555,162,70)
+ add('Adres:',40,20);add('[kod:B10001]',1050,30,120)
+ add('Adres',30,100);add('Kod',100,100);add('Nazwa',300,100);add('Ilość',650,100);add('Cena',800,100);add('Wartość',900,100);add('Kwota',1040,100);add('Wartość',1120,100);add('Brutto',1120,125)
+ add('KTCZETR1345',100,160,150);add('USZCZELNIACZ',300,162,150);add('PÓŁOSI',460,162,90);add('FORD',300,185,70)
  add('2.00',650,160);add('17.89',800,161);add('35.78',900,161);add('23',1000,161);add('8.23',1060,161);add('44.01',1120,161)
  add('KTMANHU726/2X',100,220,170);add('FILTR',300,221,70);add('OLEJU',375,221,70)
  add('1.00',650,220);add('16.27',800,220);add('16.27',900,220);add('23',1000,220);add('3.74',1060,220);add('20.01',1120,220)
- assert.match(spatialOcrLines(words)[1],/^KTCZETR1345 USZCZELNIACZ/)
+ assert.match(spatialOcrLines(words).find(line=>line.includes('KTCZETR1345')),/^KTCZETR1345 USZCZELNIACZ/)
  const document=parseSpatialDeliveryDocument({
   text:'XENO-ŚWIST Danuta Świst\nWydanie zewnętrzne nr: 3/WZ/2025/16969\nWartość dokumentu: 64.02',
   elements:words,
  })
  assert.deepEqual(document.items.map(item=>[item.part_no,item.qty,item.unit_cost,item.gross_total]),[
-  ['KTCZETR1345',2,17.89,44.01],
-  ['KTMANHU726/2X',1,16.27,20.01],
+  ['KTCZETR1345',2,22.01,44.01],
+  ['KTMANHU726/2X',1,20.01,20.01],
  ])
+ assert.equal(document.items[0].name,'USZCZELNIACZ PÓŁOSI FORD')
 })
 
 test('przyjęcie tworzy nową kartę i aktualizuje stan istniejącej',()=>{
@@ -102,10 +104,29 @@ test('przyjęcie tworzy nową kartę i aktualizuje stan istniejącej',()=>{
  const operations=buildInventoryImport(stock,document)
  assert.equal(operations[0].kind,'update')
  assert.equal(operations[0].payload.stock,5)
- assert.equal(operations[0].payload.unit_cost,16.16)
+ assert.equal(operations[0].payload.unit_cost,17.8)
  assert.equal(operations[1].kind,'create')
  assert.equal(operations[1].payload.stock,1)
- assert.equal(operations[1].payload.sell_price,23.59)
+ assert.equal(operations[1].payload.sell_price,29.01)
+})
+
+test('wartość brutto jest ceną całej pozycji i nie jest ponownie mnożona przez ilość',()=>{
+ const document=parseDeliveryDocument(`
+Wydanie zewnętrzne nr: 3/WZ/2026/12446
+KTFEB22902 TARCZA HAMULC. AUDI VW 2.00 SZT 99.18 198.36 23 45.62 243.98
+Wartość dokumentu: 243.98
+`)
+ assert.equal(document.items[0].gross_total,243.98)
+ assert.equal(document.items[0].unit_cost,121.99)
+ const [operation]=buildInventoryImport([],document)
+ assert.equal(operation.payload.stock,2)
+ assert.equal(operation.payload.unit_cost,121.99)
+})
+
+test('ręczna korekta ilości i ceny końcowej przyjmuje polski przecinek',()=>{
+ const [operation]=buildInventoryImport([],{items:[{enabled:true,part_no:'KTFEB22902',name:'Tarcza hamulcowa',qty:'2,00',gross_total:'243,98'}]})
+ assert.equal(operation.payload.stock,2)
+ assert.equal(operation.payload.unit_cost,121.99)
 })
 
 test('identyfikator dokumentu jest stabilny',()=>{

@@ -77,8 +77,8 @@ export function parseDeliveryItem(line){
   const gross_total=values.length>=5?values[values.length-1]:round(netTotal+vat_amount)
   const lineMismatch=Math.abs(round(qty*scannedCost)-round(netTotal))>.08,taxMismatch=Math.abs(round(netTotal+vat_amount)-round(gross_total))>.08
   const derivedNet=vat_rate>0&&vat_amount>0?vat_amount/(vat_rate/100):0
-  const unit_cost=round((lineMismatch||taxMismatch)&&qty>0?(derivedNet||netTotal)/qty:scannedCost)
-  return{enabled:true,part_no,name,qty,unit_cost,net_total:netTotal,vat_rate,vat_amount,gross_total,confidence:lineMismatch||taxMismatch||part_no.length<5?'CHECK':'GOOD',source_line:line}
+  const unit_cost=round(qty>0?gross_total/qty:0)
+  return{enabled:true,part_no,name,qty,unit_cost,net_unit_cost:scannedCost,net_total:netTotal,vat_rate,vat_amount,gross_total,confidence:lineMismatch||taxMismatch||part_no.length<5?'CHECK':'GOOD',source_line:line}
 }
 
 export function parseDeliveryDocument(rawText){
@@ -138,11 +138,78 @@ export function spatialOcrLines(elements=[]){
   return rows.sort((a,b)=>a.center-b.center).map(row=>row.words.sort((a,b)=>a.left-b.left).map(word=>word.text).join(' '))
 }
 
+const folded=value=>clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+const centerX=word=>(word.left+word.right)/2
+const centerY=word=>(word.top+word.bottom)/2
+const spatialWords=elements=>elements.map(element=>({
+  text:clean(element?.text),
+  left:spatialNumber(element?.left),right:spatialNumber(element?.right),
+  top:spatialNumber(element?.top),bottom:spatialNumber(element?.bottom),
+})).filter(word=>word.text&&word.right>word.left&&word.bottom>word.top)
+
+function closestHeader(words,label,minX=-Infinity){
+  return words.filter(word=>centerX(word)>minX&&folded(word.text).startsWith(label)).sort((a,b)=>a.top-b.top||a.left-b.left)[0]
+}
+
+function clusterCodeRows(words){
+  const rows=[]
+  for(const word of [...words].sort((a,b)=>centerY(a)-centerY(b)||a.left-b.left)){
+    const y=centerY(word),height=word.bottom-word.top
+    const row=rows.find(candidate=>Math.abs(candidate.y-y)<=Math.max(candidate.height,height)*.75)
+    if(row){row.words.push(word);row.y=row.words.reduce((sum,item)=>sum+centerY(item),0)/row.words.length;row.height=Math.max(row.height,height)}
+    else rows.push({words:[word],y,height})
+  }
+  return rows.sort((a,b)=>a.y-b.y)
+}
+
+export function parseFixedSupplierTable(result={}){
+  const words=spatialWords(result.elements)
+  if(!words.length)return[]
+  const priceHeader=closestHeader(words,'cena')
+  if(!priceHeader)return[]
+  const headerAt=label=>words.filter(word=>folded(word.text).startsWith(label)).sort((a,b)=>Math.abs(centerY(a)-centerY(priceHeader))-Math.abs(centerY(b)-centerY(priceHeader))||a.left-b.left)[0]
+  const codeHeader=headerAt('kod'),nameHeader=headerAt('nazwa'),qtyHeader=headerAt('ilosc'),addressHeader=headerAt('adres')
+  if(!codeHeader||!nameHeader||!qtyHeader||!priceHeader)return[]
+  const headerTolerance=Math.max(28,(priceHeader.bottom-priceHeader.top)*2.25)
+  const headerY=Math.max(...words.filter(word=>Math.abs(centerY(word)-centerY(priceHeader))<=headerTolerance).map(word=>word.bottom))
+  const valueHeaders=words.filter(word=>folded(word.text).startsWith('wartosc')&&Math.abs(centerY(word)-centerY(priceHeader))<=headerTolerance).sort((a,b)=>a.left-b.left)
+  const grossHeader=valueHeaders.at(-1)
+  const vatAmountHeader=words.filter(word=>folded(word.text).startsWith('kwota')&&Math.abs(centerY(word)-centerY(priceHeader))<=headerTolerance).sort((a,b)=>b.left-a.left)[0]
+  if(!grossHeader)return[]
+  const endWord=words.filter(word=>word.top>headerY&&/^(razem|wartosc)$/i.test(folded(word.text))).sort((a,b)=>a.top-b.top)[0]
+  const tableBottom=endWord?.top||(Math.max(...words.map(word=>word.bottom))+1)
+  const codeLeft=addressHeader?(centerX(addressHeader)+centerX(codeHeader))/2:codeHeader.left-(Number(result.width)||grossHeader.right)*.04
+  const codeRight=(centerX(codeHeader)+centerX(nameHeader))/2
+  const nameRight=(centerX(nameHeader)+centerX(qtyHeader))/2
+  const qtyRight=(centerX(qtyHeader)+centerX(priceHeader))/2
+  const grossLeft=vatAmountHeader?(centerX(vatAmountHeader)+centerX(grossHeader))/2:grossHeader.left-(Number(result.width)||grossHeader.right)*.035
+  const body=words.filter(word=>word.top>headerY&&word.bottom<tableBottom)
+  const codeRows=clusterCodeRows(body.filter(word=>centerX(word)>=codeLeft&&centerX(word)<codeRight))
+    .filter(row=>row.words.some(word=>/\d/.test(word.text)))
+  return codeRows.map((row,index)=>{
+    const next=codeRows[index+1]
+    // The code is printed at the beginning of a physical row, while a long
+    // product name may wrap two or three lines below it. Keep everything up
+    // to the beginning of the next code instead of splitting at the midpoint.
+    const top=Math.max(headerY,row.y-row.height*.75)
+    const bottom=next?next.y-next.height*.75:tableBottom
+    const rowWords=body.filter(word=>centerY(word)>=top&&centerY(word)<bottom)
+    const code=row.words.sort((a,b)=>a.left-b.left).map(word=>word.text).join('').replace(/\s+/g,'')
+    const name=rowWords.filter(word=>centerX(word)>=codeRight&&centerX(word)<nameRight).sort((a,b)=>centerY(a)-centerY(b)||a.left-b.left).map(word=>word.text).join(' ').replace(/\s+/g,' ').trim()
+    const qtyWord=rowWords.filter(word=>centerX(word)>=nameRight&&centerX(word)<qtyRight&&/\d/.test(word.text)).sort((a,b)=>Math.abs(centerX(a)-centerX(qtyHeader))-Math.abs(centerX(b)-centerX(qtyHeader)))[0]
+    const grossWord=rowWords.filter(word=>centerX(word)>=grossLeft&&/\d/.test(word.text)).sort((a,b)=>b.right-a.right)[0]
+    const qty=amount(qtyWord?.text),gross_total=amount(grossWord?.text)
+    if(!normalizePartNumber(code)||!name||qty<=0||gross_total<=0)return null
+    return{enabled:true,part_no:normalizePartNumber(code),name,qty,unit_cost:round(gross_total/qty),net_unit_cost:0,net_total:0,vat_rate:23,vat_amount:0,gross_total,confidence:'GOOD',source_line:rowWords.sort((a,b)=>a.left-b.left).map(word=>word.text).join(' ')}
+  }).filter(Boolean)
+}
+
 export function parseSpatialDeliveryDocument(result={}){
   const visualText=spatialOcrLines(result.elements).join('\n')
   const visual=parseDeliveryDocument(visualText)
   const linear=parseDeliveryDocument(result.text||'')
-  const items=visual.items.length?visual.items:linear.items
+  const fixed=parseFixedSupplierTable(result)
+  const items=fixed.length?fixed:visual.items.length?visual.items:linear.items
   const warnings=[...new Set([
     ...(items.length?visual.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')):visual.warnings),
     ...linear.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')),
@@ -177,11 +244,12 @@ export function buildInventoryImport(stock=[],document={}){
   if(!selected.length)throw new Error('Wybierz co najmniej jedną pozycję do przyjęcia.')
   const operations=[]
   selected.forEach((source,index)=>{
-    const part_no=normalizePartNumber(source.part_no),name=clean(source.name),qty=Number(source.qty),unit_cost=round(source.unit_cost)
+    const part_no=normalizePartNumber(source.part_no),name=clean(source.name),qty=amount(source.qty),line_total=round(amount(source.gross_total)),fallbackUnitCost=round(amount(source.unit_cost))
     if(!part_no)throw new Error(`Pozycja ${index+1}: uzupełnij numer katalogowy.`)
     if(!name)throw new Error(`Pozycja ${index+1}: uzupełnij nazwę części.`)
     if(!Number.isFinite(qty)||qty<=0)throw new Error(`Pozycja ${index+1}: ilość musi być większa od zera.`)
-    if(!Number.isFinite(unit_cost)||unit_cost<0)throw new Error(`Pozycja ${index+1}: cena zakupu jest niepoprawna.`)
+    if((!Number.isFinite(line_total)||line_total<=0)&&(!Number.isFinite(fallbackUnitCost)||fallbackUnitCost<0))throw new Error(`Pozycja ${index+1}: cena zakupu jest niepoprawna.`)
+    const unit_cost=line_total>0?round(line_total/qty):fallbackUnitCost
     const existing=byNumber.get(part_no)
     if(existing){
       const oldStock=Number(existing.payload.stock||0),newStock=oldStock+qty,weighted=newStock?round((oldStock*Number(existing.payload.unit_cost||0)+qty*unit_cost)/newStock):unit_cost
