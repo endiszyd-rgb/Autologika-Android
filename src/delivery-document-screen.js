@@ -1,7 +1,7 @@
 import React,{useMemo,useRef,useState} from 'react'
 import {ActivityIndicator,Alert,Image,Modal,NativeModules,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,useWindowDimensions} from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import {CameraView,requestCameraPermissionsAsync} from 'expo-camera'
+import {CameraView,useCameraPermissions} from 'expo-camera'
 import * as FileSystem from 'expo-file-system/legacy'
 import {extractTextFromImage,isSupported} from 'expo-text-extractor'
 import {list,patch,put} from './db'
@@ -15,20 +15,29 @@ const Input=({label,value,onChangeText,wide=false,numeric=false})=><View style={
 export default function DeliveryDocumentScanner({visible,onClose,onImported}){
  const{width}=useWindowDimensions(),phone=width<600
  const cameraRef=useRef(null)
- const[phase,setPhase]=useState('START'),[image,setImage]=useState(null),[document,setDocument]=useState(null),[busyText,setBusyText]=useState(''),[error,setError]=useState(''),[capturing,setCapturing]=useState(false)
- const reset=()=>{setPhase('START');setImage(null);setDocument(null);setError('');setBusyText('');setCapturing(false)}
+ const[cameraPermission,requestCameraPermission]=useCameraPermissions()
+ const[phase,setPhase]=useState('START'),[image,setImage]=useState(null),[document,setDocument]=useState(null),[busyText,setBusyText]=useState(''),[error,setError]=useState(''),[capturing,setCapturing]=useState(false),[cameraReady,setCameraReady]=useState(false)
+ const reset=()=>{setPhase('START');setImage(null);setDocument(null);setError('');setBusyText('');setCapturing(false);setCameraReady(false)}
  const close=()=>{if(phase==='OCR'||phase==='IMPORT')return;reset();onClose()}
  const analyze=async asset=>{
   setImage(asset);setPhase('OCR');setBusyText('Odczytuję tabelę i numery katalogowe…')
-  const spatial=Platform.OS==='android'&&NativeModules.DeliveryOcr?.recognize?await NativeModules.DeliveryOcr.recognize(asset.uri):null
+  const nativeRecognize=NativeModules.DeliveryOcr?.recognize
+  const spatial=Platform.OS==='android'&&typeof nativeRecognize==='function'?await nativeRecognize.call(NativeModules.DeliveryOcr,asset.uri):null
+  if(!spatial&&typeof extractTextFromImage!=='function')throw new Error('Moduł OCR nie jest dostępny w tej wersji aplikacji.')
   const parsed=spatial?parseSpatialDeliveryDocument(spatial):parseDeliveryDocument(((await extractTextFromImage(asset.uri))||[]).join('\n'))
   setDocument({...parsed,items:parsed.items.map((item,index)=>({...item,key:`ocr-${index}`}))});setPhase('REVIEW')
  }
  const choose=async camera=>{
   try{
    setError('')
-   if(!isSupported)throw new Error('To urządzenie nie obsługuje lokalnego rozpoznawania tekstu.')
-   if(camera){const permission=await requestCameraPermissionsAsync();if(!permission.granted)throw new Error('Aplikacja potrzebuje dostępu do aparatu.');setPhase('CAMERA');return}
+   const hasNativeOcr=typeof NativeModules.DeliveryOcr?.recognize==='function'
+   if(!hasNativeOcr&&!isSupported)throw new Error('To urządzenie nie obsługuje lokalnego rozpoznawania tekstu.')
+   if(camera){
+    if(typeof requestCameraPermission!=='function')throw new Error('Moduł uprawnień aparatu nie jest dostępny. Uruchom ponownie aplikację po aktualizacji.')
+    const permission=cameraPermission?.granted?cameraPermission:await requestCameraPermission()
+    if(!permission?.granted)throw new Error('Aplikacja potrzebuje dostępu do aparatu.')
+    setCameraReady(false);setPhase('CAMERA');return
+   }
    const permission=await ImagePicker.requestMediaLibraryPermissionsAsync()
    if(!permission.granted)throw new Error('Aplikacja potrzebuje dostępu do galerii.')
    const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],quality:1})
@@ -37,7 +46,18 @@ export default function DeliveryDocumentScanner({visible,onClose,onImported}){
    await analyze(asset)
   }catch(e){setError(e.message||String(e));setPhase('START')}
  }
- const capture=async()=>{if(capturing||!cameraRef.current)return;try{setCapturing(true);const asset=await cameraRef.current.takePictureAsync({quality:1,skipProcessing:false});if(asset?.uri)await analyze(asset)}catch(e){setError(e.message||String(e));setPhase('START')}finally{setCapturing(false)}}
+ const capture=async()=>{if(capturing)return;try{
+  setCapturing(true)
+  const takePicture=cameraRef.current?.takePictureAsync
+  if(typeof takePicture==='function'){
+   const asset=await takePicture.call(cameraRef.current,{quality:1,skipProcessing:false})
+   if(!asset?.uri)throw new Error('Aparat nie zwrócił zdjęcia dokumentu.')
+   await analyze(asset);return
+  }
+  if(typeof ImagePicker.launchCameraAsync!=='function')throw new Error('Moduł aparatu nie jest dostępny w tej wersji aplikacji.')
+  const result=await ImagePicker.launchCameraAsync({mediaTypes:['images'],cameraType:ImagePicker.CameraType?.back,quality:1})
+  if(!result.canceled&&result.assets?.[0]?.uri)await analyze(result.assets[0])
+ }catch(e){setError(`Aparat: ${e?.message||String(e)}`);setPhase('START')}finally{setCapturing(false)}}
  const header=(key,value)=>setDocument(current=>({...current,[key]:value}))
  const row=(key,field,value)=>setDocument(current=>({...current,items:current.items.map(item=>item.key===key?{...item,[field]:value}:item)}))
  const removeRow=key=>setDocument(current=>({...current,items:current.items.filter(item=>item.key!==key)}))
@@ -60,7 +80,7 @@ export default function DeliveryDocumentScanner({visible,onClose,onImported}){
  }
  return <Modal visible={visible} animationType="slide" onRequestClose={close}><View style={st.root}><View style={[st.header,phone&&st.headerPhone]}><View style={{flex:1,minWidth:0}}><Text style={st.kicker}>MOBILNE OCR · PRZYJĘCIE DOSTAWY</Text><Text numberOfLines={2} style={[st.title,phone&&st.titlePhone]}>Skanuj dokument części</Text></View><Pressable onPress={close} style={st.close}><Text style={st.closeText}>×</Text></Pressable></View>
   {phase==='START'&&<ScrollView contentContainerStyle={[st.start,phone&&st.startPhone]}><View style={st.paper}><View style={st.scanLine}/><Text style={st.paperIcon}>▤</Text><Text style={st.paperTitle}>Kartka z hurtowni → magazyn</Text><Text style={st.paperText}>Połóż dokument na płaskiej powierzchni, fotografuj prosto z góry i obejmij całą tabelę. Tekst jest rozpoznawany lokalnie na telefonie.</Text></View>{!!error&&<View style={st.error}><Text style={st.errorTitle}>Nie udało się odczytać dokumentu</Text><Text style={st.errorText}>{error}</Text></View>}<Pressable onPress={()=>choose(true)} style={[st.action,st.primary]}><Text style={st.primaryIcon}>◎</Text><View><Text style={st.primaryTitle}>Zrób zdjęcie dokumentu</Text><Text style={st.primaryText}>Aparat w aplikacji · lampa zawsze włączona</Text></View></Pressable><Pressable onPress={()=>choose(false)} style={st.action}><Text style={st.actionIcon}>▧</Text><View><Text style={st.actionTitle}>Wybierz z galerii</Text><Text style={st.actionText}>Użyj wcześniej zrobionego zdjęcia</Text></View></Pressable></ScrollView>}
-  {phase==='CAMERA'&&<View style={st.cameraScreen}><CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="picture" flash="on" enableTorch><View style={st.cameraShade}><View style={st.cameraGuide}><Text style={st.cameraGuideText}>Umieść całą tabelę dokumentu w ramce</Text></View><View style={st.cameraControls}><View style={st.flashBadge}><Text style={st.flashBadgeText}>⚡ LAMPA WŁĄCZONA</Text></View><Pressable disabled={capturing} onPress={capture} style={[st.shutter,capturing&&st.disabled]}><View style={st.shutterCore}/></Pressable><Pressable onPress={()=>setPhase('START')} style={st.cameraCancel}><Text style={st.cameraCancelText}>Anuluj</Text></Pressable></View></View></CameraView></View>}
+  {phase==='CAMERA'&&<View style={st.cameraScreen}><CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="picture" flash="on" enableTorch onCameraReady={()=>setCameraReady(true)} onMountError={event=>{setError(`Aparat: ${event?.message||'nie udało się uruchomić podglądu'}`);setPhase('START')}}><View style={st.cameraShade}><View style={st.cameraGuide}><Text style={st.cameraGuideText}>{cameraReady?'Umieść całą tabelę dokumentu w ramce':'Uruchamiam aparat…'}</Text></View><View style={st.cameraControls}><View style={st.flashBadge}><Text style={st.flashBadgeText}>⚡ LAMPA WŁĄCZONA</Text></View><Pressable disabled={capturing||!cameraReady} onPress={capture} style={[st.shutter,(capturing||!cameraReady)&&st.disabled]}><View style={st.shutterCore}/></Pressable><Pressable onPress={()=>setPhase('START')} style={st.cameraCancel}><Text style={st.cameraCancelText}>Anuluj</Text></Pressable></View></View></CameraView></View>}
   {(phase==='OCR'||phase==='IMPORT')&&<View style={st.busy}><View style={st.busyRing}><ActivityIndicator size="large" color="#b9ef79"/></View><Text style={st.busyKicker}>{phase==='OCR'?'ANALIZA DOKUMENTU':'PRZYJĘCIE DOSTAWY'}</Text><Text style={st.busyTitle}>{busyText}</Text><Text style={st.busyText}>Nie zamykaj aplikacji. Duże zdjęcie może wymagać kilkunastu sekund.</Text></View>}
   {phase==='DONE'&&<View style={st.done}><View style={st.doneMark}><Text style={st.doneMarkText}>✓</Text></View><Text style={st.kicker}>DOSTAWA PRZYJĘTA</Text><Text style={st.doneTitle}>Części są już w magazynie</Text><Text style={st.doneText}>Nowe karty oraz zwiększone stany zostaną objęte standardową synchronizacją z wersją PC.</Text><Pressable onPress={close} style={[st.action,st.primary]}><Text style={st.primaryTitle}>Przejdź do magazynu</Text></Pressable></View>}
   {phase==='REVIEW'&&document&&<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[st.review,phone&&st.reviewPhone]}><View style={[st.summary,phone&&st.summaryPhone]}>{image?.uri&&<Image source={{uri:image.uri}} style={[st.preview,phone&&st.previewPhone]}/>}<View style={st.summaryData}><Text style={st.kicker}>WARTOŚĆ KOŃCOWA DOKUMENTU</Text><Text style={st.summaryTitle}>{selected.length} pozycji · {totals.qty} szt.</Text><Text style={st.summaryTotal}>{money(finalTotal)}</Text><Text style={[st.documentTotal,totalMismatch&&st.documentTotalMismatch]}>Suma pozycji: {money(totals.gross)}{totalMismatch?' · sprawdź pozycje':''}</Text><Pressable onPress={()=>choose(true)}><Text style={st.link}>↻ Zrób inne zdjęcie</Text></Pressable></View></View>

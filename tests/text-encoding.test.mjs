@@ -35,5 +35,9 @@ test('ekran zleceń ma zdefiniowany panel tworzenia zlecenia',()=>{
 test('aparat dokumentów uruchamia lampę dla podglądu i zdjęcia',()=>{
  const screen=readFileSync('src/delivery-document-screen.js','utf8')
  assert.match(screen,/<CameraView[^>]+flash="on"[^>]+enableTorch/)
- assert.match(screen,/requestCameraPermissionsAsync/)
+ assert.match(screen,/useCameraPermissions/)
+ assert.match(screen,/onCameraReady=/)
+ assert.match(screen,/typeof takePicture==='function'/)
+ assert.match(screen,/ImagePicker\.launchCameraAsync/)
+ assert.match(screen,/typeof NativeModules\.DeliveryOcr\?\.recognize==='function'/)
 })
