@@ -19,6 +19,64 @@ test('rozpoznaje pozycje polskiego dokumentu dostawy',()=>{
  assert.deepEqual(document.items.map(item=>[item.part_no,item.qty,item.unit_cost]),[['KTCZETR1345',2,17.89],['KTMANHU726/2X',1,16.27]])
 })
 
+test('składa pozycje, gdy mobilny OCR rozdzieli kolumny tabeli na linie',()=>{
+ const wrapped=`
+XENO-ŚWIST Danuta Świst
+Wydanie zewnętrzne nr: 3/WZ/2025/16969
+Kod towaru
+Nazwa towaru/usługi
+Ilość towaru/usł
+Cena jedn. Netto
+KTCZETR1345
+USZCZELNIACZ PÓŁOSI F
+ORD
+2 00
+SZT
+17 89
+35 78
+23
+8 23
+44 01
+KTMANHU726/2X
+FILTR OLEJU
+1.00
+SZT
+16.27
+16.27
+23
+3.74
+20.01
+Razem: 51.99
+`
+ const document=parseDeliveryDocument(wrapped)
+ assert.deepEqual(document.items.map(item=>[item.part_no,item.name,item.qty,item.unit_cost,item.gross_total]),[
+  ['KTCZETR1345','USZCZELNIACZ PÓŁOSI F ORD',2,17.89,44.01],
+  ['KTMANHU726/2X','FILTR OLEJU',1,16.27,20.01],
+ ])
+ assert.equal(document.warnings.some(warning=>warning.startsWith('Nie rozpoznano pozycji')),false)
+})
+
+test('nie gubi zawiniętej pozycji, gdy poprzedni wiersz OCR był kompletny',()=>{
+ const mixed=`
+Wydanie zewnętrzne nr: 3/WZ/2025/16969
+Kod towaru Nazwa towaru Ilość Cena Netto Wartość Brutto
+1 KTCZETR1345 USZCZELNIACZ PÓŁOSI 2.00 SZT 17.89 35.78 23 8.23 44.01
+VLV5W30 XL III 5L
+OLEJ VALVOLINE XL-III SYN POWER 5W30 5L
+1.00
+136.58
+136.58
+23
+31.41
+167.99
+Razem: 212.00
+`
+ const document=parseDeliveryDocument(mixed)
+ assert.deepEqual(document.items.map(item=>item.part_no),['KTCZETR1345','VLV5W30'])
+ assert.equal(document.items[1].name,'XL III 5L OLEJ VALVOLINE XL-III SYN POWER 5W30 5L')
+ assert.equal(document.items[1].unit_cost,136.58)
+})
+
 test('przyjęcie tworzy nową kartę i aktualizuje stan istniejącej',()=>{
  const document=parseDeliveryDocument(sample)
  const stock=[{cloud_id:'existing',payload:{part_no:'KTCZETR1345',name:'Uszczelniacz',stock:3,unit_cost:15,notes:''}}]

@@ -7,7 +7,50 @@ const amount=value=>{
 }
 
 export const normalizePartNumber=value=>clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Ł/gi,'L').replace(/^[^A-Z0-9]+|[^A-Z0-9./-]+$/gi,'').toUpperCase()
-export const normalizeOcrText=value=>String(value||'').replace(/\r/g,'').replace(/[„”]/g,'"').replace(/(?<=\d):(?=\d{2}\b)/g,'.').replace(/[ \t]+/g,' ').split('\n').map(line=>line.trim()).filter(Boolean).join('\n')
+export const normalizeOcrText=value=>String(value||'').replace(/\r/g,'').replace(/[„”]/g,'"').replace(/(?<=\d):(?=\d{2}\b)/g,'.').replace(/\b(\d{1,6})[ \t]+(\d{2})\b/g,'$1.$2').replace(/[ \t]+/g,' ').split('\n').map(line=>line.trim()).filter(Boolean).join('\n')
+
+const tableHeader=/^(lp\.?|mag\.?|grupa|adres|kod(?:\s+towaru)?|nazwa(?:\s+towaru)?|ilo(?:ś|s)ć|j\.?m\.?|cena|warto(?:ś|s)ć|podatek|netto|brutto)(?:\s|$)/i
+const tableEnd=/^(razem|w tym|warto(?:ś|s)ć dokumentu|spos(?:ó|o)b zap(?:ł|l)aty|termin|transport)(?:\s|:|$)/i
+const likelyPartToken=token=>{
+  const value=normalizePartNumber(token)
+  return value.length>=4&&value.length<=32&&/[A-Z]/i.test(value)&&/\d/.test(value)&&!/^SZT$/i.test(value)&&!/^(?:WZ|FV|FA|VAT)\d*$/i.test(value)
+}
+const partTokenIn=line=>[...clean(line).matchAll(/[A-ZĄĆĘŁŃÓŚŹŻ0-9][A-ZĄĆĘŁŃÓŚŹŻ0-9./-]*/gi)].find(match=>{
+  if(!likelyPartToken(match[0]))return false
+  const prefix=clean(line).slice(0,match.index).trim()
+  // Before a catalogue number documents may contain LP, warehouse group or
+  // location columns. Reject mixed tokens embedded later in a product name
+  // (for example 5W30), because those are not starts of new rows.
+  return !prefix||prefix.split(/\s+/).every(token=>/^\d{1,3}$/.test(token)||/^[A-Z0-9]{1,3}$/i.test(token))
+})
+
+function joinedDeliveryRows(lines){
+  const rows=[]
+  let current=[]
+  let insideTable=false
+  const flush=()=>{
+    if(!current.length)return
+    const item=parseDeliveryItem(current.join(' '))
+    if(item)rows.push(item)
+    current=[]
+  }
+  for(const line of lines){
+    if(tableEnd.test(line)){flush();break}
+    if(tableHeader.test(line)){insideTable=true;continue}
+    const code=partTokenIn(line)
+    if(code){
+      // A new catalogue number starts the next physical table row. OCR often
+      // emits the name and numeric columns as separate lines afterwards.
+      flush()
+      current=[line]
+      insideTable=true
+      continue
+    }
+    if(insideTable&&current.length)current.push(line)
+  }
+  flush()
+  return rows
+}
 
 function supplierFrom(lines,documentIndex){
   const before=lines.slice(0,Math.max(0,documentIndex)).filter(line=>!/(sprzedaw|adres|nip|regon|konto|bank|telefon|tel\.|email|polica|data|wydruk)/i.test(line))
@@ -53,6 +96,10 @@ export function parseDeliveryDocument(rawText){
       const continuation=line.replace(/[|;]/g,' ').replace(/^[^A-ZĄĆĘŁŃÓŚŹŻ]+/,'').replace(/\s+/g,' ').trim()
       if(continuation.length>2)current.name=`${current.name} ${continuation}`.replace(/\s+/g,' ').trim()
     }
+  }
+  for(const joined of joinedDeliveryRows(lines)){
+    const existing=items.find(item=>item.part_no===joined.part_no)
+    if(!existing)items.push(joined)
   }
   const rowsGross=round(items.reduce((sum,item)=>sum+item.gross_total,0)),gross_total=totals.length?amount(totals.at(-1)[0]):rowsGross,warnings=[]
   if(!items.length)warnings.push('Nie rozpoznano pozycji tabeli. Zrób zdjęcie prosto nad kartką albo dodaj wiersze ręcznie.')
