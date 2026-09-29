@@ -1,4 +1,15 @@
-# Autologika Android 0.29.0
+# Autologika Android 0.30.0
+
+## Nowe w 0.30.0
+
+- mobilne skanowanie dokumentów dostawy bezpośrednio aparatem telefonu,
+- lokalne OCR rozpoznające dostawcę, numer dokumentu, datę, numery katalogowe, nazwy, ilości i ceny,
+- ekran kontroli i poprawiania odczytanych pozycji przed przyjęciem,
+- automatyczne tworzenie kart części, zwiększanie stanów i wyliczanie średniej ceny zakupu,
+- archiwum zdjęć dokumentów oraz ochrona przed ponownym przyjęciem tej samej dostawy,
+- synchronizacja zmian magazynowych z wersją PC,
+- osobny układ telefonu dla ekranów 360-599 px: pionowy radar, jednokolumnowe formularze i skalowane panele,
+- poprawione menu, nagłówki, karty magazynu, modale i przyciski na małych ekranach.
 
 ## Nowe w 0.29.0
 
