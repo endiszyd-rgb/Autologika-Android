@@ -23,6 +23,7 @@ dist-schedule-release-check/
 dist-delivery-check*/
 dist-phone-check/
 dist-orders-crash-check/
+dist-sum-check/
 release/
 *.apk
 *.aab

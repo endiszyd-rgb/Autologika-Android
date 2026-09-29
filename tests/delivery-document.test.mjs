@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {buildInventoryImport,parseDeliveryDocument,parseSpatialDeliveryDocument,spatialOcrLines,stableDocumentId} from '../src/delivery-document.js'
+import {buildInventoryImport,deliveryDocumentTotals,parseDeliveryDocument,parseSpatialDeliveryDocument,spatialOcrLines,stableDocumentId} from '../src/delivery-document.js'
 
 const sample=`
 XENO-ŚWIST Danuta Świst
@@ -153,6 +153,15 @@ test('ręczna korekta ilości i ceny końcowej przyjmuje polski przecinek',()=>{
  const [operation]=buildInventoryImport([],{items:[{enabled:true,part_no:'KTFEB22902',name:'Tarcza hamulcowa',qty:'2,00',gross_total:'243,98'}]})
  assert.equal(operation.payload.stock,2)
  assert.equal(operation.payload.unit_cost,121.99)
+})
+
+test('suma dokumentu obejmuje ceny końcowe tylko zaznaczonych pozycji',()=>{
+ const totals=deliveryDocumentTotals([
+  {enabled:true,qty:'2,00',gross_total:'44,01'},
+  {enabled:true,qty:'1',gross_total:'20.01'},
+  {enabled:false,qty:'4',gross_total:'99,99'},
+ ])
+ assert.deepEqual(totals,{count:2,qty:3,gross:64.02})
 })
 
 test('identyfikator dokumentu jest stabilny',()=>{

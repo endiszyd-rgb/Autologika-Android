@@ -6,6 +6,14 @@ const amount=value=>{
   return Number.isFinite(parsed)?parsed:0
 }
 
+export function deliveryDocumentTotals(items=[]){
+  return(items||[]).filter(item=>item?.enabled!==false).reduce((totals,item)=>({
+    count:totals.count+1,
+    qty:round(totals.qty+amount(item.qty)),
+    gross:round(totals.gross+amount(item.gross_total)),
+  }),{count:0,qty:0,gross:0})
+}
+
 export const normalizePartNumber=value=>clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Ł/gi,'L').replace(/^[^A-Z0-9]+|[^A-Z0-9./-]+$/gi,'').toUpperCase()
 export const normalizeOcrText=value=>String(value||'').replace(/\r/g,'').replace(/[„”]/g,'"').replace(/(?<=\d):(?=\d{2}\b)/g,'.').replace(/\b(\d{1,6})[ \t]+(\d{2})\b/g,'$1.$2').replace(/[ \t]+/g,' ').split('\n').map(line=>line.trim()).filter(Boolean).join('\n')
 
@@ -315,17 +323,20 @@ export function parseSpatialDeliveryDocument(result={}){
   // correctly read header must not let a partial fixed-column result hide the
   // remaining rows recovered from the document's measured row geometry.
   const items=[fixed,geometric,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
+  const gross_total=linear.gross_total||visual.gross_total
+  const itemTotals=deliveryDocumentTotals(items)
   const warnings=[...new Set([
     ...(items.length?visual.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')):visual.warnings),
     ...linear.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')),
-  ])]
+  ].filter(warning=>!warning.startsWith('Suma odczytanych pozycji')))]
   if(!items.length)warnings.unshift('Nie rozpoznano pozycji tabeli. Zrób zdjęcie prosto nad kartką i obejmij cały obszar od numerów katalogowych do cen brutto.')
+  if(gross_total>0&&Math.abs(gross_total-itemTotals.gross)>.1)warnings.push(`Suma odczytanych pozycji (${itemTotals.gross.toFixed(2)} zł) różni się od wartości dokumentu (${gross_total.toFixed(2)} zł).`)
   return{
     ...linear,
     supplier_name:linear.supplier_name||visual.supplier_name,
     document_no:linear.document_no||visual.document_no,
     document_date:linear.document_date||visual.document_date,
-    gross_total:linear.gross_total||visual.gross_total,
+    gross_total,
     items,
     warnings,
     raw_text:visualText||linear.raw_text,
