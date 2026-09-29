@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {buildInventoryImport,parseDeliveryDocument,stableDocumentId} from '../src/delivery-document.js'
+import {buildInventoryImport,parseDeliveryDocument,parseSpatialDeliveryDocument,spatialOcrLines,stableDocumentId} from '../src/delivery-document.js'
 
 const sample=`
 XENO-ŚWIST Danuta Świst
@@ -75,6 +75,25 @@ Razem: 212.00
  assert.deepEqual(document.items.map(item=>item.part_no),['KTCZETR1345','VLV5W30'])
  assert.equal(document.items[1].name,'XL III 5L OLEJ VALVOLINE XL-III SYN POWER 5W30 5L')
  assert.equal(document.items[1].unit_cost,136.58)
+})
+
+test('odbudowuje wiersze tabeli z pozycji słów zwróconych przez ML Kit',()=>{
+ const words=[]
+ const add=(text,left,top,width=70,height=20)=>words.push({text,left,top,right:left+width,bottom:top+height})
+ add('Kod',100,100);add('Nazwa',300,100);add('Ilość',650,100);add('Cena',800,100);add('Netto',900,100);add('VAT',1000,100);add('Brutto',1120,100)
+ add('KTCZETR1345',100,160,150);add('USZCZELNIACZ',300,162,150);add('PÓŁOSI',460,162,90);add('FORD',555,162,70)
+ add('2.00',650,160);add('17.89',800,161);add('35.78',900,161);add('23',1000,161);add('8.23',1060,161);add('44.01',1120,161)
+ add('KTMANHU726/2X',100,220,170);add('FILTR',300,221,70);add('OLEJU',375,221,70)
+ add('1.00',650,220);add('16.27',800,220);add('16.27',900,220);add('23',1000,220);add('3.74',1060,220);add('20.01',1120,220)
+ assert.match(spatialOcrLines(words)[1],/^KTCZETR1345 USZCZELNIACZ/)
+ const document=parseSpatialDeliveryDocument({
+  text:'XENO-ŚWIST Danuta Świst\nWydanie zewnętrzne nr: 3/WZ/2025/16969\nWartość dokumentu: 64.02',
+  elements:words,
+ })
+ assert.deepEqual(document.items.map(item=>[item.part_no,item.qty,item.unit_cost,item.gross_total]),[
+  ['KTCZETR1345',2,17.89,44.01],
+  ['KTMANHU726/2X',1,16.27,20.01],
+ ])
 })
 
 test('przyjęcie tworzy nową kartę i aktualizuje stan istniejącej',()=>{

@@ -1,10 +1,10 @@
 import React,{useMemo,useState} from 'react'
-import {ActivityIndicator,Alert,Image,Modal,Pressable,ScrollView,StyleSheet,Text,TextInput,View,useWindowDimensions} from 'react-native'
+import {ActivityIndicator,Alert,Image,Modal,NativeModules,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View,useWindowDimensions} from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import {extractTextFromImage,isSupported} from 'expo-text-extractor'
 import {list,patch,put} from './db'
-import {buildInventoryImport,parseDeliveryDocument,stableDocumentId} from './delivery-document'
+import {buildInventoryImport,parseDeliveryDocument,parseSpatialDeliveryDocument,stableDocumentId} from './delivery-document'
 
 const blankItem=()=>({key:`manual-${Date.now()}-${Math.random()}`,enabled:true,part_no:'',name:'',qty:'1',unit_cost:'0',vat_rate:'23',gross_total:'0',confidence:'CHECK'})
 const money=value=>`${Number(value||0).toFixed(2).replace('.',',')} zł`
@@ -25,7 +25,8 @@ export default function DeliveryDocumentScanner({visible,onClose,onImported}){
    if(result.canceled)return
    const asset=result.assets?.[0];if(!asset?.uri)return
    setImage(asset);setPhase('OCR');setBusyText('Odczytuję tabelę i numery katalogowe…')
-   const blocks=await extractTextFromImage(asset.uri),parsed=parseDeliveryDocument((blocks||[]).join('\n'))
+   const spatial=Platform.OS==='android'&&NativeModules.DeliveryOcr?.recognize?await NativeModules.DeliveryOcr.recognize(asset.uri):null
+   const parsed=spatial?parseSpatialDeliveryDocument(spatial):parseDeliveryDocument(((await extractTextFromImage(asset.uri))||[]).join('\n'))
    setDocument({...parsed,items:parsed.items.map((item,index)=>({...item,key:`ocr-${index}`}))});setPhase('REVIEW')
   }catch(e){setError(e.message||String(e));setPhase('START')}
  }

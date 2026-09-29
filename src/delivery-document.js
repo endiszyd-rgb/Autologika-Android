@@ -108,6 +108,58 @@ export function parseDeliveryDocument(rawText){
   return{supplier_name:supplierFrom(lines,documentIndex),document_no,document_date:date?date.split(/[./-]/).reverse().join('-'):'',currency:'PLN',gross_total,items,warnings,raw_text}
 }
 
+const spatialNumber=value=>Number.isFinite(Number(value))?Number(value):0
+
+export function spatialOcrLines(elements=[]){
+  const words=elements.map(element=>({
+    text:clean(element?.text),
+    left:spatialNumber(element?.left),
+    right:spatialNumber(element?.right),
+    top:spatialNumber(element?.top),
+    bottom:spatialNumber(element?.bottom),
+  })).filter(word=>word.text&&word.right>word.left&&word.bottom>word.top)
+    .sort((a,b)=>((a.top+a.bottom)-(b.top+b.bottom))||a.left-b.left)
+  const rows=[]
+  for(const word of words){
+    const center=(word.top+word.bottom)/2,height=word.bottom-word.top
+    let best=null,bestDistance=Infinity
+    for(const row of rows){
+      const overlap=Math.min(row.bottom,word.bottom)-Math.max(row.top,word.top)
+      const minHeight=Math.min(row.height,height)
+      const distance=Math.abs(center-row.center)
+      if((overlap>=minHeight*.22||distance<=Math.max(row.height,height)*.68)&&distance<bestDistance){best=row;bestDistance=distance}
+    }
+    if(best){
+      best.words.push(word)
+      best.top=Math.min(best.top,word.top);best.bottom=Math.max(best.bottom,word.bottom)
+      best.height=best.bottom-best.top;best.center=(best.top+best.bottom)/2
+    }else rows.push({words:[word],top:word.top,bottom:word.bottom,height,center})
+  }
+  return rows.sort((a,b)=>a.center-b.center).map(row=>row.words.sort((a,b)=>a.left-b.left).map(word=>word.text).join(' '))
+}
+
+export function parseSpatialDeliveryDocument(result={}){
+  const visualText=spatialOcrLines(result.elements).join('\n')
+  const visual=parseDeliveryDocument(visualText)
+  const linear=parseDeliveryDocument(result.text||'')
+  const items=visual.items.length?visual.items:linear.items
+  const warnings=[...new Set([
+    ...(items.length?visual.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')):visual.warnings),
+    ...linear.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')),
+  ])]
+  if(!items.length)warnings.unshift('Nie rozpoznano pozycji tabeli. Zrób zdjęcie prosto nad kartką i obejmij cały obszar od numerów katalogowych do cen brutto.')
+  return{
+    ...linear,
+    supplier_name:linear.supplier_name||visual.supplier_name,
+    document_no:linear.document_no||visual.document_no,
+    document_date:linear.document_date||visual.document_date,
+    gross_total:linear.gross_total||visual.gross_total,
+    items,
+    warnings,
+    raw_text:visualText||linear.raw_text,
+  }
+}
+
 export function stableDocumentId(document={}){
   const seed=[document.supplier_name,document.document_no,document.document_date,document.gross_total,document.raw_text].map(value=>clean(value).toUpperCase()).join('|')
   let hash=2166136261
