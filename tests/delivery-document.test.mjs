@@ -123,6 +123,31 @@ Wartość dokumentu: 243.98
  assert.equal(operation.payload.unit_cost,121.99)
 })
 
+test('formularz XENO działa bez rozpoznanych nagłówków i scala cenę przeciętą linią tabeli',()=>{
+ const words=[]
+ const add=(text,left,top,width=60,height=20)=>words.push({text,left,top,right:left+width,bottom:top+height})
+ // OCR telefonu nie zwrócił nagłówków tabeli. Zostały tylko komórki w ich
+ // stałych miejscach na formularzu oraz rozbita kropka w wartości brutto.
+ add('KTFEB',250,300,75);add('22902',326,300,64)
+ add('TARCZA',430,300,85);add('HAMULCOWA',430,326,125);add('AUDI',560,326,55)
+ add('2',680,300,18);add('00',701,300,25)
+ add('243',1100,300,42);add('98',1145,300,28)
+ add('KTFEB16502',250,390,140)
+ add('KLOCKI',430,390,85);add('HAMULCOWE',520,390,120)
+ add('1.00',680,390,55);add('102,00',1100,390,75)
+ add('Razem',850,520,75)
+ const document=parseSpatialDeliveryDocument({
+  width:1200,height:1000,
+  text:'XENO-ŚWIST Danuta Świst\nWydanie zewnętrzne nr: 3/WZ/2026/12446\nWartość dokumentu: 345.98',
+  elements:words,
+ })
+ assert.deepEqual(document.items.map(item=>[item.part_no,item.name,item.qty,item.gross_total,item.unit_cost]),[
+  ['KTFEB22902','TARCZA HAMULCOWA AUDI',2,243.98,121.99],
+  ['KTFEB16502','KLOCKI HAMULCOWE',1,102,102],
+ ])
+ assert.equal(document.warnings.some(warning=>warning.startsWith('Nie rozpoznano pozycji')),false)
+})
+
 test('ręczna korekta ilości i ceny końcowej przyjmuje polski przecinek',()=>{
  const [operation]=buildInventoryImport([],{items:[{enabled:true,part_no:'KTFEB22902',name:'Tarcza hamulcowa',qty:'2,00',gross_total:'243,98'}]})
  assert.equal(operation.payload.stock,2)

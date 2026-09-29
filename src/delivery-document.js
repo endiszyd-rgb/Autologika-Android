@@ -162,6 +162,73 @@ function clusterCodeRows(words){
   return rows.sort((a,b)=>a.y-b.y)
 }
 
+const wordsInHorizontalBand=(words,left,right)=>words.filter(word=>centerX(word)>=left&&centerX(word)<right)
+
+function cellAmount(words){
+  const ordered=[...words].sort((a,b)=>a.left-b.left)
+  const direct=ordered.map(word=>({value:amount(word.text),text:clean(word.text)}))
+    .filter(entry=>entry.value>0&&/\d/.test(entry.text))
+  const decimal=direct.find(entry=>/[.,:]\s*\d{2}\b/.test(entry.text)||/^\d+\s+\d{2}$/.test(entry.text))
+  if(decimal)return decimal.value
+  // ML Kit sometimes returns `243` and `98` as two elements because the dot
+  // lies on a printed table line. Rebuild that cell before parsing it.
+  const digits=ordered.map(word=>clean(word.text).replace(/\D/g,'')).filter(Boolean)
+  if(digits.length>=2&&digits.at(-1).length===2)return amount(`${digits.slice(0,-1).join('')}.${digits.at(-1)}`)
+  return direct[0]?.value||0
+}
+
+function templatePageWidth(result,words){
+  const declared=spatialNumber(result.width)
+  const observed=Math.max(...words.map(word=>word.right),0)
+  return declared>0&&declared>=observed*.8?declared:observed
+}
+
+// Every XENO-SWIST WZ uses the same printed form. This fallback deliberately
+// does not depend on OCR reading the multi-line column headers. It uses their
+// fixed page proportions, which remain stable for camera photos and gallery
+// images even when ML Kit drops `Cena`, `Ilosc` or `Brutto` entirely.
+export function parseXenoTemplateTable(result={}){
+  const words=spatialWords(result.elements)
+  if(words.length<8)return[]
+  const width=templatePageWidth(result,words)
+  const height=spatialNumber(result.height)||Math.max(...words.map(word=>word.bottom),0)
+  if(width<=0||height<=0)return[]
+
+  const codeBand=[width*.19,width*.36]
+  const nameBand=[width*.34,width*.57]
+  const qtyBand=[width*.52,width*.64]
+  const grossBand=[width*.84,width*.985]
+  const headerWords=words.filter(word=>/^(kod|nazwa|ilo|cena|warto)/i.test(folded(word.text)))
+  const headerAnchor=headerWords.filter(word=>/^(kod|nazwa|ilosc|cena)/i.test(folded(word.text))&&centerY(word)>height*.1&&centerY(word)<height*.42).sort((a,b)=>a.top-b.top)[0]
+  const headerY=headerAnchor
+    ? Math.max(...headerWords.filter(word=>Math.abs(centerY(word)-centerY(headerAnchor))<height*.055).map(word=>word.bottom),headerAnchor.bottom)
+    : height*.2
+  const totalWord=words.filter(word=>word.top>headerY&&word.left>width*.55&&/^(razem|wartosc)$/i.test(folded(word.text))).sort((a,b)=>a.top-b.top)[0]
+  const tableBottom=Math.min(totalWord?.top||height*.78,height*.82)
+
+  const possibleCodeWords=wordsInHorizontalBand(words,codeBand[0],codeBand[1])
+    .filter(word=>centerY(word)>headerY&&centerY(word)<tableBottom)
+  const codeRows=clusterCodeRows(possibleCodeWords)
+    .map(row=>{
+      const joined=row.words.sort((a,b)=>a.left-b.left).map(word=>word.text).join('').replace(/\s+/g,'')
+      return{...row,code:normalizePartNumber(joined)}
+    })
+    .filter(row=>likelyPartToken(row.code)&&!/^(?:B?10001|202\d|33101)$/i.test(row.code))
+
+  return codeRows.map((row,index)=>{
+    const previous=codeRows[index-1],next=codeRows[index+1]
+    const top=previous?(previous.y+row.y)/2:Math.max(headerY,row.y-row.height*1.1)
+    const bottom=next?(row.y+next.y)/2:tableBottom
+    const rowWords=words.filter(word=>centerY(word)>=top&&centerY(word)<bottom)
+    const name=rowWords.filter(word=>centerX(word)>=nameBand[0]&&centerX(word)<nameBand[1])
+      .sort((a,b)=>centerY(a)-centerY(b)||a.left-b.left).map(word=>word.text).join(' ').replace(/\s+/g,' ').trim()
+    const qty=cellAmount(wordsInHorizontalBand(rowWords,qtyBand[0],qtyBand[1]))
+    const gross_total=cellAmount(wordsInHorizontalBand(rowWords,grossBand[0],grossBand[1]))
+    if(!name||qty<=0||gross_total<=0)return null
+    return{enabled:true,part_no:row.code,name,qty,unit_cost:round(gross_total/qty),net_unit_cost:0,net_total:0,vat_rate:23,vat_amount:0,gross_total,confidence:'GOOD',source_line:rowWords.sort((a,b)=>a.left-b.left).map(word=>word.text).join(' ')}
+  }).filter(Boolean)
+}
+
 export function parseFixedSupplierTable(result={}){
   const words=spatialWords(result.elements)
   if(!words.length)return[]
@@ -209,7 +276,11 @@ export function parseSpatialDeliveryDocument(result={}){
   const visual=parseDeliveryDocument(visualText)
   const linear=parseDeliveryDocument(result.text||'')
   const fixed=parseFixedSupplierTable(result)
-  const items=fixed.length?fixed:visual.items.length?visual.items:linear.items
+  const template=parseXenoTemplateTable(result)
+  // Prefer the interpretation that recovered the most physical rows. A single
+  // correctly read header must not let a partial fixed-column result hide the
+  // remaining rows recovered by the form-template fallback.
+  const items=[fixed,template,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
   const warnings=[...new Set([
     ...(items.length?visual.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')):visual.warnings),
     ...linear.warnings.filter(warning=>!warning.startsWith('Nie rozpoznano pozycji')),
