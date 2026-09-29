@@ -25,3 +25,9 @@ test('interfejs telefonu wspiera obie orientacje bez wymuszonej szerokości',()=
  assert.doesNotMatch(app,/ScrollView horizontal=\{compact\}/)
  assert.match(app,/WIĘCEJ/)
 })
+
+test('ekran zleceń ma zdefiniowany panel tworzenia zlecenia',()=>{
+ const app=readFileSync('App.js','utf8')
+ assert.match(app,/function NewOrderPanel\s*\(/)
+ assert.match(app,/<NewOrderPanel refresh=\{refresh\} openCenter=\{openCenter\}\/>/)
+})
