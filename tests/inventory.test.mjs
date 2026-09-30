@@ -12,6 +12,8 @@ test('normalizes an editable inventory card and its cross references',()=>{
 
 test('rejects invalid inventory data and prevents a negative stock',()=>{
   assert.throws(()=>inventoryPayload({name:'Filtr',stock:'-1'}),/Stan magazynowy/)
+  assert.throws(()=>inventoryPayload({name:'Filtr',stock:'1.97'}),/liczbą całkowitą/)
+  assert.throws(()=>inventoryPayload({name:'Filtr',min_stock:'0.5'}),/liczbą całkowitą/)
   assert.throws(()=>inventoryPayload({name:'Filtr',barcode:'123'}),/Kod kreskowy/)
   assert.equal(adjustedStock(0,-1),0)
   assert.equal(adjustedStock(2,1),3)

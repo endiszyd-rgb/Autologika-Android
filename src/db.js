@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy'
 import {ORDER_CHILD_TYPES,relatedDeletionRows} from './deletion-graph.js'
 import {recordId,sameRecordId} from './record-id.js'
 import {customerPayload,duplicateCustomer} from './customer-model.js'
+import {normalizePartPayload} from './part-quantity.js'
 
 let dbPromise
 export function db(){ if(!dbPromise)dbPromise=SQLite.openDatabaseAsync('autologika-mobile.db'); return dbPromise }
@@ -25,6 +26,17 @@ export async function initDb(){
   `)
   // 0.4+: ujednolicenie nazwy załączników z desktopem.
   await d.runAsync("UPDATE records SET entity_type='attachments' WHERE entity_type='attachments_mobile'")
+  const quantityMigration=await d.getFirstAsync("SELECT value FROM meta WHERE key='wholePartQuantitiesV1'")
+  if(!quantityMigration?.value){
+    const rows=await d.getAllAsync("SELECT entity_type,cloud_id,payload,version FROM records WHERE deleted_at IS NULL AND entity_type IN ('inventory_parts','job_part_orders','order_items')")
+    for(const row of rows){
+      let current
+      try{current=JSON.parse(row.payload||'{}')}catch{continue}
+      const normalized=normalizePartPayload(row.entity_type,current)
+      if(JSON.stringify(normalized)!==JSON.stringify(current))await d.runAsync('UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type=? AND cloud_id=?',[JSON.stringify(normalized),new Date().toISOString(),Number(row.version||1)+1,row.entity_type,row.cloud_id])
+    }
+    await d.runAsync("INSERT INTO meta(key,value) VALUES ('wholePartQuantitiesV1','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+  }
 }
 export const now=()=>new Date().toISOString()
 export const uid=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`

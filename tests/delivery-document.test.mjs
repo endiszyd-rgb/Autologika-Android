@@ -123,6 +123,10 @@ Wartość dokumentu: 243.98
  assert.equal(operation.payload.unit_cost,121.99)
 })
 
+test('import dokumentu odrzuca ułamkową liczbę części',()=>{
+ assert.throws(()=>buildInventoryImport([],{items:[{enabled:true,part_no:'FILTR-1',name:'Filtr',qty:'1,97',gross_total:'100'}]}),/liczbą całkowitą/)
+})
+
 test('geometria wierszy działa bez nagłówków przy zmiennym kącie i scala cenę przeciętą linią',()=>{
  const words=[]
  const add=(text,left,top,width=60,height=20)=>words.push({text,left,top,right:left+width,bottom:top+height})

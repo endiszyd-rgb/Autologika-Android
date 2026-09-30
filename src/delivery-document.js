@@ -1,4 +1,5 @@
 const clean=value=>String(value??'').trim()
+import {wholePartQuantity} from './part-quantity.js'
 const round=value=>Math.round((Number(value)||0)*100)/100
 const amount=value=>{
   const normalized=clean(value).replace(/\s/g,'').replace(/(?<=\d):(?=\d{2}\b)/g,'.').replace(',','.')
@@ -390,7 +391,7 @@ export function buildInventoryImport(stock=[],document={}){
     const part_no=normalizePartNumber(source.part_no),name=clean(source.name),qty=amount(source.qty),line_total=round(amount(source.gross_total)),fallbackUnitCost=round(amount(source.unit_cost))
     if(!part_no)throw new Error(`Pozycja ${index+1}: uzupełnij numer katalogowy.`)
     if(!name)throw new Error(`Pozycja ${index+1}: uzupełnij nazwę części.`)
-    if(!Number.isFinite(qty)||qty<=0)throw new Error(`Pozycja ${index+1}: ilość musi być większa od zera.`)
+    wholePartQuantity(qty,{label:`Pozycja ${index+1}: ilość części`})
     if((!Number.isFinite(line_total)||line_total<=0)&&(!Number.isFinite(fallbackUnitCost)||fallbackUnitCost<0))throw new Error(`Pozycja ${index+1}: cena zakupu jest niepoprawna.`)
     const unit_cost=line_total>0?round(line_total/qty):fallbackUnitCost
     const existing=byNumber.get(part_no)

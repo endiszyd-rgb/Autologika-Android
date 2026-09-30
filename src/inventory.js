@@ -1,4 +1,5 @@
 import {isGtin,normalizeBarcode} from './part-catalog.js'
+import {roundedPartQuantity,wholePartQuantity} from './part-quantity.js'
 
 const text=value=>String(value??'').trim()
 const number=(value,label)=>{
@@ -22,12 +23,13 @@ export function inventoryPayload(draft={}){
   return {
     barcode,name,brand:text(draft.brand),part_no:text(draft.part_no),category:text(draft.category),description:'',
     vehicle_fitment:lines(draft.vehicle_fitment),cross_numbers:lines(draft.cross_numbers),image_url:text(draft.image_url),
-    lookup_source:text(draft.lookup_source),lookup_url:text(draft.lookup_url),stock:number(draft.stock,'Stan magazynowy'),
-    min_stock:number(draft.min_stock,'Stan minimalny'),unit_cost:number(draft.unit_cost,'Cena zakupu'),
+    lookup_source:text(draft.lookup_source),lookup_url:text(draft.lookup_url),stock:wholePartQuantity(draft.stock,{allowZero:true,label:'Stan magazynowy'}),
+    min_stock:wholePartQuantity(draft.min_stock,{allowZero:true,label:'Stan minimalny'}),unit_cost:number(draft.unit_cost,'Cena zakupu'),
     sell_price:number(draft.sell_price,'Cena sprzedaży'),location:text(draft.location),notes:text(draft.notes)
   }
 }
 
 export function adjustedStock(current,delta){
-  return Math.max(0,Number(current||0)+Number(delta||0))
+  const stock=roundedPartQuantity(current,{allowZero:true}),change=wholePartQuantity(Math.abs(Number(delta)),{label:'Zmiana stanu'})*Math.sign(Number(delta))
+  return Math.max(0,stock+change)
 }
