@@ -188,3 +188,26 @@ test('identyfikator dokumentu jest stabilny',()=>{
  assert.equal(stableDocumentId(document),stableDocumentId({...document}))
  assert.notEqual(stableDocumentId(document),stableDocumentId({...document,document_no:'INNY/1/2025'}))
 })
+
+test('nie myli grupy i adresu magazynowego z numerem katalogowym',()=>{
+ const words=[]
+ const add=(text,left,top,width=60,height=20)=>words.push({text,left,top,right:left+width,bottom:top+height})
+ const row=(top,group,address,code,name,qty,net,netTotal,vat,gross)=>{
+  add(group,100,top,50);add(address,170,top,65);add(code,270,top,105);add(name,410,top,220)
+  add(qty,700,top,55);add(net,810,top,65);add(netTotal,910,top,65);add('23',1000,top,30);add(vat,1060,top,60);add(gross,1150,top,70)
+ }
+ row(300,'0037','A01','M2H-254','KONCOWKA DRAZKA','2.00','25.20','50.40','11.59','61.99')
+ row(380,'0043','LEDIL','PRO103','LAMPA INSPEKCYJNA','1.00','78.05','78.05','17.96','96.01')
+ row(460,'0055','POLI4','K2-K156','PLYN DO NABLYSZCZANIA OPON','1.00','17.89','17.89','4.11','22.00')
+ add('Razem',900,540,75);add('180.00',1150,540,70)
+ const document=parseSpatialDeliveryDocument({
+  width:1300,height:900,
+  text:'XENO-SWIST Danuta Swist\nWydanie zewnetrzne nr: 3/WZ/2026/124\nWartosc dokumentu: 180.00',
+  elements:words,
+ })
+ assert.deepEqual(document.items.map(item=>item.part_no),['M2H-254','PRO103','K2-K156'])
+ assert.deepEqual(document.items.map(item=>item.qty),[2,1,1])
+ assert.deepEqual(document.items.map(item=>item.gross_total),[61.99,96.01,22])
+ assert.equal(deliveryDocumentTotals(document.items).gross,180)
+ assert.equal(document.warnings.some(warning=>warning.startsWith('Suma odczytanych pozycji')),false)
+})

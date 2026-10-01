@@ -1,5 +1,5 @@
 const clean=value=>String(value??'').trim()
-import {wholePartQuantity} from './part-quantity.js'
+import {isWholePartQuantity,wholePartQuantity} from './part-quantity.js'
 const round=value=>Math.round((Number(value)||0)*100)/100
 const amount=value=>{
   const normalized=clean(value).replace(/\s/g,'').replace(/(?<=\d):(?=\d{2}\b)/g,'.').replace(',','.')
@@ -253,8 +253,26 @@ function strongestCodeColumn(candidates,observedWidth){
   }
   return clusters.sort((a,b)=>{
     const aRows=new Set(a.candidates.map(item=>item.index)).size,bRows=new Set(b.candidates.map(item=>item.index)).size
-    return bRows-aRows||b.candidates.length-a.candidates.length
+    // Supplier documents put warehouse group and shelf/address columns before
+    // the actual catalogue number. Joining those cells can look like a valid
+    // alphanumeric part number in every row. When two repeated columns are
+    // equally strong, the rightmost one is the catalogue-number column because
+    // it sits directly before the product name and numeric values.
+    return bRows-aRows||b.x-a.x||b.candidates.length-a.candidates.length
   })[0]
+}
+
+function deliveryCandidateScore(items=[],documentTotal=0){
+  if(!items.length)return-Infinity
+  const totals=deliveryDocumentTotals(items)
+  const whole=items.filter(item=>isWholePartQuantity(item.qty)).length
+  const fractional=items.length-whole
+  const complete=items.filter(item=>normalizePartNumber(item.part_no)&&clean(item.name)&&amount(item.gross_total)>0).length
+  const mismatch=documentTotal>0?Math.abs(documentTotal-totals.gross):0
+  // A fractional quantity is evidence that the OCR shifted the row and read a
+  // price as quantity. Penalize it more strongly than a missing row; users can
+  // add a missing line, while a shifted line silently corrupts every field.
+  return items.length*100+whole*80+complete*30-fractional*260-Math.min(mismatch,500)
 }
 
 // Spatial fallback for sharp documents photographed at any angle. It learns
@@ -342,10 +360,12 @@ export function parseSpatialDeliveryDocument(result={}){
   const linear=parseDeliveryDocument(result.text||'')
   const fixed=parseFixedSupplierTable(result)
   const geometric=parseGeometricDeliveryTable(result)
-  // Prefer the interpretation that recovered the most physical rows. A single
-  // correctly read header must not let a partial fixed-column result hide the
-  // remaining rows recovered from the document's measured row geometry.
-  const recoveredItems=[fixed,geometric,visual.items,linear.items].sort((a,b)=>b.length-a.length)[0]
+  const referenceTotal=closestDocumentTotal(0,linear.gross_total,visual.gross_total)
+  // Prefer complete rows with whole-piece quantities and a sum close to the
+  // printed document total. Counting rows alone allowed a shifted table to win
+  // even when it interpreted 78.05 or 17.89 as the number of parts.
+  const recoveredItems=[fixed,geometric,visual.items,linear.items]
+    .sort((a,b)=>deliveryCandidateScore(b,referenceTotal)-deliveryCandidateScore(a,referenceTotal))[0]
   const itemTotals=deliveryDocumentTotals(recoveredItems)
   // ML Kit exposes both a linear text stream and positioned words. A character
   // may be confused in only one representation (for example 180.00 as 184.06),
