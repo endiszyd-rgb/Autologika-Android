@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {buildInventoryImport,deliveryDocumentTotals,parseDeliveryDocument,parseSpatialDeliveryDocument,spatialOcrLines,stableDocumentId} from '../src/delivery-document.js'
+import {buildInventoryImport,deliveryDocumentTotals,deliveryReviewWarnings,editDeliveryItem,parseDeliveryDocument,parseSpatialDeliveryDocument,spatialOcrLines,stableDocumentId} from '../src/delivery-document.js'
 
 const sample=`
 XENO-ŚWIST Danuta Świst
@@ -210,4 +210,21 @@ test('nie myli grupy i adresu magazynowego z numerem katalogowym',()=>{
  assert.deepEqual(document.items.map(item=>item.gross_total),[61.99,96.01,22])
  assert.equal(deliveryDocumentTotals(document.items).gross,180)
  assert.equal(document.warnings.some(warning=>warning.startsWith('Suma odczytanych pozycji')),false)
+})
+
+test('ręczna weryfikacja pozycji usuwa nieaktualne ostrzeżenie OCR',()=>{
+ const warning='Co najmniej jeden numer lub cena wymaga sprawdzenia z dokumentem.'
+ const source={part_no:'PRO103',name:'Lampa',qty:1,gross_total:96.01,confidence:'CHECK'}
+ assert.deepEqual(deliveryReviewWarnings([warning],[source]),[warning])
+ const reviewed=editDeliveryItem(source,'part_no','PRO103')
+ assert.equal(reviewed.confidence,'MANUAL')
+ assert.deepEqual(deliveryReviewWarnings([warning],[reviewed]),[])
+ assert.deepEqual(deliveryReviewWarnings(['Suma odczytanych pozycji (10.00 zł) różni się od wartości dokumentu (20.00 zł).'],[reviewed]),[])
+})
+
+test('pole ilości przyjmuje tylko pełne cyfry',()=>{
+ const source={qty:'2',confidence:'GOOD'}
+ assert.equal(editDeliveryItem(source,'qty','12').qty,'12')
+ assert.equal(editDeliveryItem(source,'qty','1,5'),source)
+ assert.equal(editDeliveryItem(source,'qty','1.5'),source)
 })

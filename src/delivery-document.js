@@ -15,6 +15,23 @@ export function deliveryDocumentTotals(items=[]){
   }),{count:0,qty:0,gross:0})
 }
 
+const reviewFields=new Set(['part_no','name','qty','gross_total'])
+
+export function editDeliveryItem(item={},field,value){
+  if(field==='qty'&&!/^\d*$/.test(String(value??'')))return item
+  return{...item,[field]:value,...(reviewFields.has(field)?{confidence:'MANUAL'}:{})}
+}
+
+export function deliveryReviewWarnings(warnings=[],items=[]){
+  const requiresReview=(items||[]).some(item=>item?.enabled!==false&&item?.confidence==='CHECK')
+  return(warnings||[]).filter(warning=>{
+    const message=clean(warning)
+    if(/^Suma odczytanych pozycji/i.test(message))return false
+    if(/^Co najmniej jeden numer lub cena/i.test(message))return requiresReview
+    return true
+  })
+}
+
 function closestDocumentTotal(rowsGross,...values){
   const candidates=[...new Set(values.flat().map(amount).filter(value=>value>0))]
   if(!candidates.length)return rowsGross
