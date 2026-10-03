@@ -25,7 +25,7 @@ export function deriveMobileOrderWorkflow({order={},diagnosis={},approvals=[],pa
  const partsDone=approvalDone&&!parts.some(row=>!CLOSED_PART_STATES.has(row.payload?.status))
  const scopeDone=partsDone&&items.length>0
  const timeDone=scopeDone&&logs.some(row=>Boolean(row.payload?.ended_at)||Number(row.payload?.duration_minutes)>0)
- const checked=key=>Boolean(qc.find(row=>row.payload?.key===key)?.payload?.checked)
+ const checked=key=>Boolean(qc.find(row=>(row.payload?.key||row.payload?.check_key)===key)?.payload?.checked)
  const qcDone=timeDone&&checked('documents')&&checked('final')
  const paid=payments.reduce((sum,row)=>sum+Number(row.payload?.amount||0),0)
  const paymentDone=qcDone&&(Number(total||0)<=0||paid+0.01>=Number(total||0))

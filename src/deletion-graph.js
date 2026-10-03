@@ -1,6 +1,6 @@
 import {recordId,sameRecordId} from './record-id.js'
 
-export const ORDER_CHILD_TYPES=['diagnostics','order_notes','job_part_orders','order_items','payments','work_logs','communications','approvals','quote_approvals','order_events','sales_refs','attachments','signatures','work_procedure_runs','order_qc']
+export const ORDER_CHILD_TYPES=['diagnostics','order_notes','job_part_orders','order_items','payments','work_logs','communications','approvals','order_events','sales_refs','attachments','signatures','work_procedure_runs','order_qc']
 
 export function relatedDeletionRows(rows,type,id){
  const vehicleIds=new Set(type==='customers'?rows.vehicles.filter(x=>sameRecordId(x.payload.customer_cloud_id,id)).map(x=>recordId(x.cloud_id)):type==='vehicles'?[recordId(id)]:[])

@@ -29,7 +29,7 @@ export function workTemplateOrderItem(template,orderId){
   const value=normalizeWorkTemplate(template)
   return {
     order_cloud_id:orderId,
-    kind:'LABOR',
+    kind:'ROBOCIZNA',
     name:`${value.name} — ${value.variant}`,
     qty:1,
     unit_price:value.hours*value.rate,

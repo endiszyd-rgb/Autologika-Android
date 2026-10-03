@@ -35,3 +35,16 @@ test('kompletne zlecenie jest gotowe do wydania',()=>{
  assert.equal(result.due,0)
  assert.equal(result.next,null)
 })
+
+test('workflow odczytuje klucze kontroli jakości zapisane przez PC',()=>{
+ const workflow=deriveMobileOrderWorkflow({
+  order:{status:'GOTOWE'},diagnosis:{conclusion:'Usterka potwierdzona'},
+  approvals:[{payload:{status:'APPROVED',decided_at:'2026-10-03T10:00:00Z'}}],
+  parts:[],items:[{payload:{kind:'ROBOCIZNA',name:'Naprawa'}}],
+  logs:[{payload:{ended_at:'2026-10-03T11:00:00Z'}}],
+  qc:[{payload:{check_key:'documents',checked:true}},{payload:{check_key:'final',checked:true}}],
+  payments:[{payload:{amount:100}}],notes:{release_notes:'Pojazd sprawdzony'},total:100
+ })
+ assert.equal(workflow.steps.find(step=>step.key==='qc').done,true)
+ assert.equal(workflow.complete,true)
+})

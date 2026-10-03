@@ -4,6 +4,7 @@ import {ORDER_CHILD_TYPES,relatedDeletionRows} from './deletion-graph.js'
 import {recordId,sameRecordId} from './record-id.js'
 import {customerPayload,duplicateCustomer} from './customer-model.js'
 import {normalizePartPayload} from './part-quantity.js'
+import {canonicalEntityType,normalizeSyncPayload} from './sync-contract.js'
 
 let dbPromise
 export function db(){ if(!dbPromise)dbPromise=SQLite.openDatabaseAsync('autologika-mobile.db'); return dbPromise }
@@ -26,6 +27,22 @@ export async function initDb(){
   `)
   // 0.4+: ujednolicenie nazwy załączników z desktopem.
   await d.runAsync("UPDATE records SET entity_type='attachments' WHERE entity_type='attachments_mobile'")
+  const syncContractMigration=await d.getFirstAsync("SELECT value FROM meta WHERE key='syncContractV1'")
+  if(!syncContractMigration?.value){
+    const rows=await d.getAllAsync("SELECT * FROM records WHERE entity_type IN ('quote_approvals','approvals','order_items','order_qc')")
+    const stamp=new Date().toISOString()
+    for(const row of rows){
+      let current
+      try{current=JSON.parse(row.payload||'{}')}catch{continue}
+      const entityType=canonicalEntityType(row.entity_type),payload=normalizeSyncPayload(entityType,current)
+      if(entityType!==row.entity_type){
+        const target=await d.getFirstAsync('SELECT updated_at FROM records WHERE entity_type=? AND cloud_id=?',[entityType,row.cloud_id])
+        if(!target||Date.parse(target.updated_at||'')<=Date.parse(row.updated_at||''))await d.runAsync(`INSERT INTO records(entity_type,cloud_id,payload,updated_at,deleted_at,version,dirty) VALUES (?,?,?,?,?,?,1) ON CONFLICT(entity_type,cloud_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,version=excluded.version,dirty=1`,[entityType,row.cloud_id,JSON.stringify(payload),stamp,row.deleted_at||null,Number(row.version||1)+1])
+        await d.runAsync('DELETE FROM records WHERE entity_type=? AND cloud_id=?',[row.entity_type,row.cloud_id])
+      }else if(JSON.stringify(payload)!==JSON.stringify(current))await d.runAsync('UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type=? AND cloud_id=?',[JSON.stringify(payload),stamp,Number(row.version||1)+1,entityType,row.cloud_id])
+    }
+    await d.runAsync("INSERT INTO meta(key,value) VALUES ('syncContractV1','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+  }
   const quantityMigration=await d.getFirstAsync("SELECT value FROM meta WHERE key='wholePartQuantitiesV1'")
   if(!quantityMigration?.value){
     const rows=await d.getAllAsync("SELECT entity_type,cloud_id,payload,version FROM records WHERE deleted_at IS NULL AND entity_type IN ('inventory_parts','job_part_orders','order_items')")
@@ -45,9 +62,9 @@ export async function initDb(){
 }
 export const now=()=>new Date().toISOString()
 export const uid=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
-export async function list(type){ const d=await db(); const rows=await d.getAllAsync('SELECT * FROM records WHERE entity_type=? AND deleted_at IS NULL ORDER BY updated_at DESC',[type]); return rows.map(x=>({...x,payload:JSON.parse(x.payload||'{}')})) }
-export async function get(type,id){ const d=await db(); const x=await d.getFirstAsync('SELECT * FROM records WHERE entity_type=? AND cloud_id=?',[type,id]); return x?{...x,payload:JSON.parse(x.payload||'{}')}:null }
-export async function put(type,id,payload,{dirty=1,updatedAt=now(),version=1}={}){ const d=await db(); await d.runAsync(`INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,?,?) ON CONFLICT(entity_type,cloud_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,version=excluded.version,dirty=excluded.dirty,deleted_at=NULL`,[type,id,JSON.stringify(payload),updatedAt,version,dirty]); return id }
+export async function list(type){ const d=await db(),entityType=canonicalEntityType(type); const rows=await d.getAllAsync('SELECT * FROM records WHERE entity_type=? AND deleted_at IS NULL ORDER BY updated_at DESC',[entityType]); return rows.map(x=>({...x,payload:normalizeSyncPayload(entityType,JSON.parse(x.payload||'{}'))})) }
+export async function get(type,id){ const d=await db(),entityType=canonicalEntityType(type); const x=await d.getFirstAsync('SELECT * FROM records WHERE entity_type=? AND cloud_id=?',[entityType,id]); return x?{...x,payload:normalizeSyncPayload(entityType,JSON.parse(x.payload||'{}'))}:null }
+export async function put(type,id,payload,{dirty=1,updatedAt=now(),version=1}={}){ const d=await db(),entityType=canonicalEntityType(type),normalized=normalizeSyncPayload(entityType,payload); await d.runAsync(`INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,?,?) ON CONFLICT(entity_type,cloud_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,version=excluded.version,dirty=excluded.dirty,deleted_at=NULL`,[entityType,id,JSON.stringify(normalized),updatedAt,version,dirty]); return id }
 export async function patch(type,id,changes){ const x=await get(type,id); if(!x)return; return put(type,id,{...x.payload,...changes},{dirty:1,version:(x.version||1)+1}) }
 const clean=value=>String(value??'').trim()
 const normalizePlate=value=>clean(value).replace(/\s+/g,' ').toUpperCase()
@@ -82,7 +99,7 @@ export async function updateVehicleGraph(id,input){
  for(const order of orders.filter(x=>sameRecordId(x.payload.vehicle_cloud_id,id)))await patch('orders',order.cloud_id,{customer:customer?.payload.name||'',plate:payload.plate,vin:payload.vin,make:payload.make,model:payload.model,generation:payload.generation,year:payload.year,engine:payload.engine,power_hp:payload.power_hp,engine_code:payload.engine_code,mileage:payload.mileage})
 }
 
-export async function remove(type,id){ const d=await db(); await d.runAsync('UPDATE records SET deleted_at=?,updated_at=?,dirty=1 WHERE entity_type=? AND cloud_id=?',[now(),now(),type,id]) }
+export async function remove(type,id){ const d=await db(),entityType=canonicalEntityType(type); await d.runAsync('UPDATE records SET deleted_at=?,updated_at=?,dirty=1 WHERE entity_type=? AND cloud_id=?',[now(),now(),entityType,id]) }
 export async function deletionPlan(type,id){
   if(!['customers','vehicles','orders'].includes(type))throw new Error('Nieobsługiwany typ rekordu.')
   const rows={}
@@ -107,7 +124,7 @@ export async function cascadeRemove(type,id){
   return plan
 }
 export async function dirty(){ const d=await db(); const rows=await d.getAllAsync('SELECT * FROM records WHERE dirty=1 ORDER BY updated_at'); return rows.map(x=>({...x,payload:JSON.parse(x.payload||'{}')})) }
-export async function markClean(type,id){ const d=await db(); await d.runAsync('UPDATE records SET dirty=0 WHERE entity_type=? AND cloud_id=?',[type,id]) }
+export async function markClean(type,id){ const d=await db(); await d.runAsync('UPDATE records SET dirty=0 WHERE entity_type=? AND cloud_id=?',[canonicalEntityType(type),id]) }
 export async function metaGet(key){ const d=await db(); return (await d.getFirstAsync('SELECT value FROM meta WHERE key=?',[key]))?.value||'' }
 export async function metaSet(key,value){ const d=await db(); await d.runAsync('INSERT INTO meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',[key,String(value||'')]) }
 
