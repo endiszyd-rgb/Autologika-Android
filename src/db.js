@@ -37,6 +37,11 @@ export async function initDb(){
     }
     await d.runAsync("INSERT INTO meta(key,value) VALUES ('wholePartQuantitiesV1','1') ON CONFLICT(key) DO UPDATE SET value='1'")
   }
+  const deliveryDocumentMigration=await d.getFirstAsync("SELECT value FROM meta WHERE key='deliveryDocumentFilesV1'")
+  if(!deliveryDocumentMigration?.value){
+    await d.runAsync("UPDATE records SET dirty=1,updated_at=? WHERE entity_type='delivery_document_imports' AND deleted_at IS NULL",[new Date().toISOString()])
+    await d.runAsync("INSERT INTO meta(key,value) VALUES ('deliveryDocumentFilesV1','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+  }
 }
 export const now=()=>new Date().toISOString()
 export const uid=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`

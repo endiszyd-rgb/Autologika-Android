@@ -69,6 +69,25 @@ async function fetchRemoteHeads(c,workshopId,outgoing){
  for(const [entityType,ids] of groups)for(let offset=0;offset<ids.length;offset+=200){const batch=ids.slice(offset,offset+200),rows=await req(c,remoteHeadsRoute(workshopId,entityType,batch),{method:'GET'})||[];if(!Array.isArray(rows))throw new Error('Cloud zwrócił nieprawidłowe dane kontroli konfliktów.');for(const row of rows)heads.set(`${row.entity_type}\0${row.cloud_id}`,row)}
  return heads
 }
+async function uploadDeliveryDocument(c,workshopId,x){
+  let payload={...(x.payload||{})}
+  if(payload.storage_path||!payload.local_uri)return payload
+  const storagePath=`${workshopId}/delivery-documents/${x.cloud_id}-${safeName(payload.name||'dokument.jpg')}`
+  const token=await sessionToken(c),file=await fetch(payload.local_uri),blob=await file.blob()
+  const r=await fetch(`${base(c)}/storage/v1/object/order-files/${encPath(storagePath)}`,{method:'POST',headers:{'apikey':c.key,'Authorization':`Bearer ${token}`,'Content-Type':payload.mime||blob.type||'image/jpeg','x-upsert':'true'},body:blob})
+  if(!r.ok)throw new Error(`Skan dokumentu upload ${r.status}: ${(await r.text()).slice(0,250)}`)
+  payload={...payload,storage_path:storagePath,size_bytes:blob.size||payload.size_bytes||0}
+  await put('delivery_document_imports',x.cloud_id,payload,{dirty:1,updatedAt:x.updated_at,version:x.version||1})
+  return payload
+}
+async function downloadDeliveryDocument(c,cloudId,payload){
+  if(!payload?.storage_path)return payload
+  if(payload.local_uri){try{const info=await FileSystem.getInfoAsync(payload.local_uri);if(info.exists)return payload}catch{}}
+  const dir=`${FileSystem.documentDirectory}autologika/delivery-documents/cloud/`
+  await FileSystem.makeDirectoryAsync(dir,{intermediates:true})
+  const ext=(String(payload.name||payload.storage_path||'').match(/\.[a-zA-Z0-9]{1,8}$/)||['.jpg'])[0],dest=`${dir}${cloudId}${ext}`,token=await sessionToken(c)
+  try{const info=await FileSystem.getInfoAsync(dest);if(!info.exists)await FileSystem.downloadAsync(`${base(c)}/storage/v1/object/authenticated/order-files/${encPath(payload.storage_path)}`,dest,{headers:{'apikey':c.key,'Authorization':`Bearer ${token}`}});return{...payload,local_uri:dest}}catch{return payload}
+}
 async function performSync({full=false}={}){
  const initial=await loadCloud(); if(!ok(initial))throw new Error('Uzupe\u0142nij URL i Publishable key Supabase.')
  const account=await currentAccount(); if(!account.loggedIn)throw new Error('Zaloguj si\u0119 do Autologika Cloud.')
@@ -83,8 +102,10 @@ async function performSync({full=false}={}){
    const remote=heads.get(`${x.entity_type}\0${x.cloud_id}`)
    if(remoteWins(remote,x.updated_at)){await markClean(x.entity_type,x.cloud_id);conflicts++;continue}
    let payload=x.payload
-   if(x.entity_type==='attachments'&&x.deleted_at){await deleteRemoteAttachment(c,payload)}
+   if(['attachments','delivery_document_imports'].includes(x.entity_type)&&x.deleted_at){await deleteRemoteAttachment(c,payload)}
    if(x.entity_type==='attachments'&&!x.deleted_at&&!payload.storage_path){payload=await uploadAttachment(c,workshopId,x);if(payload.storage_path)filesUp++}
+   if(x.entity_type==='delivery_document_imports'&&!x.deleted_at&&!payload.storage_path){payload=await uploadDeliveryDocument(c,workshopId,x);if(payload.storage_path)filesUp++}
+   if(x.entity_type==='delivery_document_imports')delete payload.local_uri
    const rec={workshop_id:workshopId,entity_type:x.entity_type,cloud_id:x.cloud_id,payload,updated_at:x.updated_at,deleted_at:x.deleted_at||null,version:x.version||1,device_id:c.deviceId||'android'}
    await req(c,'/rest/v1/sync_records?on_conflict=workshop_id,entity_type,cloud_id',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rec)})
    await markClean(x.entity_type,x.cloud_id); pushed++
@@ -104,7 +125,9 @@ async function performSync({full=false}={}){
    if(!shouldApplyRemote(local,r)){skipped++;continue}
    let payload=normalizePartPayload(r.entity_type,r.payload||{})
    if(r.entity_type==='attachments'&&r.deleted_at){try{const lp=local?.payload?JSON.parse(local.payload):{};if(lp.local_uri)await FileSystem.deleteAsync(lp.local_uri,{idempotent:true})}catch{}}
+   if(r.entity_type==='delivery_document_imports'&&r.deleted_at){try{const lp=local?.payload?JSON.parse(local.payload):{};if(lp.local_uri)await FileSystem.deleteAsync(lp.local_uri,{idempotent:true})}catch{}}
    if(r.entity_type==='attachments'&&!r.deleted_at){const before=payload.local_uri;payload=await downloadAttachment(c,r.cloud_id,payload);if(!before&&payload.local_uri)filesDown++}
+   if(r.entity_type==='delivery_document_imports'&&!r.deleted_at){const before=payload.local_uri;payload=await downloadDeliveryDocument(c,r.cloud_id,payload);if(!before&&payload.local_uri)filesDown++}
    await d.runAsync(`INSERT INTO records(entity_type,cloud_id,payload,updated_at,deleted_at,version,dirty) VALUES (?,?,?,?,?,?,0) ON CONFLICT(entity_type,cloud_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,version=excluded.version,dirty=0`,[r.entity_type,r.cloud_id,JSON.stringify(payload),r.updated_at,r.deleted_at||null,r.version||1]); pulled++
  }
  if(rows.length)await metaSet('lastSync',rows[rows.length-1].updated_at)

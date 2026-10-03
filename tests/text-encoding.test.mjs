@@ -41,3 +41,11 @@ test('aparat dokumentów uruchamia lampę dla podglądu i zdjęcia',()=>{
  assert.match(screen,/ImagePicker\.launchCameraAsync/)
  assert.match(screen,/typeof NativeModules\.DeliveryOcr\?\.recognize==='function'/)
 })
+
+test('magazyn pokazuje synchronizowaną historię dokumentów dostaw',()=>{
+ const app=readFileSync('App.js','utf8')
+ assert.match(app,/list\('delivery_document_imports'\)/)
+ assert.match(app,/Dokumenty dostaw · \$\{deliveries\.length\}/)
+ assert.match(app,/Szukaj dokumentu/)
+ assert.match(app,/Otwórz skan/)
+})

@@ -76,7 +76,7 @@ export default function DeliveryDocumentScanner({visible,onClose,onImported}){
    const extension=(image?.fileName?.match(/\.[a-z0-9]{2,8}$/i)||['.jpg'])[0],localUri=`${directory}${id}${extension}`
    await FileSystem.copyAsync({from:image.uri,to:localUri})
    for(const operation of operations){if(operation.kind==='update')await patch('inventory_parts',operation.id,operation.payload);else await put('inventory_parts',operation.id,operation.payload)}
-   await put('delivery_document_imports',id,{supplier_name:document.supplier_name,document_no:document.document_no,document_date:document.document_date,gross_total:finalTotal,items_gross_total:totals.gross,document_gross_total:documentTotal,item_count:operations.length,quantity:totals.qty,local_uri:localUri,created_at:new Date().toISOString()})
+   await put('delivery_document_imports',id,{supplier_name:document.supplier_name,document_no:document.document_no,document_date:document.document_date,gross_total:finalTotal,items_gross_total:totals.gross,document_gross_total:documentTotal,item_count:operations.length,quantity:totals.qty,items:selected.map(({key,...item})=>item),local_uri:localUri,name:image?.fileName||`${id}${extension}`,mime:image?.mimeType||'image/jpeg',created_at:new Date().toISOString()})
    setPhase('DONE');onImported?.({created:operations.filter(x=>x.kind==='create').length,updated:operations.filter(x=>x.kind==='update').length,item_count:operations.length,quantity:totals.qty})
   }catch(e){setError(e.message||String(e));setPhase('REVIEW')}
  }
