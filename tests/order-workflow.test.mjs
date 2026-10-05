@@ -4,16 +4,16 @@ import {deriveMobileOrderWorkflow} from '../src/order-workflow.js'
 
 const complete={order:{status:'GOTOWE'},diagnosis:{symptom_confirmed:'Uszkodzony czujnik'},approvals:[{cloud_id:'1',payload:{status:'APPROVED',decided_at:'2026-09-22'}}],parts:[],items:[{cloud_id:'item'}],logs:[{payload:{ended_at:'2026-09-22',duration_minutes:45}}],payments:[{payload:{amount:500}}],qc:[{payload:{key:'documents',checked:true}},{payload:{key:'final',checked:true}}],notes:{release_notes:'Zalecenia przekazane'},total:500}
 
-test('nowe zlecenie zaczyna od podstawowej diagnozy',()=>{
+test('nowe zlecenie po przyjęciu przechodzi do podstawowej diagnozy',()=>{
  const result=deriveMobileOrderWorkflow({order:{status:'PRZYJETE'}})
  assert.equal(result.next.key,'diagnosis')
- assert.equal(result.done,0)
+ assert.equal(result.done,1)
 })
 
-test('czas pracy poprzedza kontrolę jakości i płatność',()=>{
+test('zakończona praca poprzedza QC naprawy i płatność',()=>{
  const result=deriveMobileOrderWorkflow({...complete,logs:[]})
- assert.equal(result.next.key,'time')
- assert.equal(result.steps.find(step=>step.key==='qc').done,false)
+ assert.equal(result.next.key,'repairQc')
+ assert.equal(result.steps.find(step=>step.key==='repairQc').done,false)
  assert.equal(result.steps.find(step=>step.key==='payment').done,false)
 })
 
@@ -45,6 +45,7 @@ test('workflow odczytuje klucze kontroli jakości zapisane przez PC',()=>{
   qc:[{payload:{check_key:'documents',checked:true}},{payload:{check_key:'final',checked:true}}],
   payments:[{payload:{amount:100}}],notes:{release_notes:'Pojazd sprawdzony'},total:100
  })
- assert.equal(workflow.steps.find(step=>step.key==='qc').done,true)
+ assert.equal(workflow.steps.find(step=>step.key==='repairQc').done,true)
+ assert.equal(workflow.steps.find(step=>step.key==='releaseQc').done,true)
  assert.equal(workflow.complete,true)
 })

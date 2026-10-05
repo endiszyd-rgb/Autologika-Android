@@ -13,7 +13,7 @@ test('interfejs nie zawiera tekstów zapisanych w uszkodzonym kodowaniu',()=>{
 
 test('workflow używa czytelnych polskich nazw i opisanych akcji',()=>{
  const app=readFileSync('App.js','utf8')
- for(const text of ['Przyjęte','Diagnoza','Akceptacja','Naprawa','Gotowe','Wstecz','Dalej','Wydaj'])assert.match(app,new RegExp(text))
+ for(const text of ['Przyjęcie','Diagnoza','Wycena','Akceptacja','Naprawa','QC naprawy','QC wydania','Płatność','Gotowe','Wstecz','Dalej','Wydaj'])assert.match(app,new RegExp(text))
 })
 
 test('interfejs telefonu wspiera obie orientacje bez wymuszonej szerokości',()=>{

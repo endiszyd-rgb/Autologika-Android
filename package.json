@@ -1,6 +1,6 @@
 {
   "name": "autologika-android",
-  "version": "0.30.14",
+  "version": "0.30.15",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
