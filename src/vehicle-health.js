@@ -1,4 +1,5 @@
 import {buildServiceForecast} from './service-forecast.js'
+import {sameRecordId} from './record-id.js'
 
 const fold=value=>String(value||'').toLocaleLowerCase('pl').replaceAll('ł','l').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 
@@ -62,7 +63,7 @@ function buildVehicleHealth(input={},options={}){
  }
  const activeOrders=orders.filter(order=>!['GOTOWE','WYDANE'].includes(order.status))
  for(const order of activeOrders){
-   const related=diagnostics.find(item=>Number(item.order_id)===Number(order.id)),unresolved=!String(related?.conclusion||'').trim()
+   const related=diagnostics.find(item=>sameRecordId(item.order_id,order.id)),unresolved=!String(related?.conclusion||'').trim()
    if(!unresolved)continue
    const system=systemFor([order.title,order.complaint,related?.symptom_confirmed,related?.dtcs].join(' '));if(!system)continue
    penalties[system.id].push({kind:'active-order',points:6,title:order.title||`Zlecenie #${order.id}`,detail:'diagnoza w toku',sourceId:order.id})

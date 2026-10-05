@@ -1,18 +1,17 @@
-AUTOLOGIKA 0.20 / ANDROID 0.5 — JUTRO START HERE
+AUTOLOGIKA ANDROID 0.31.0 — START NA JUTRO
 
-1. Na PC rozpakuj Autologika_OS_MVP_0.20.zip do nowego katalogu.
-2. Użyj Node 22 LTS. W PowerShell korzystaj z npm.cmd.
-3. npm.cmd install
-4. npm.cmd run rebuild
-5. npm.cmd run dev
-6. W Supabase uruchom/zweryfikuj cloud_schema_supabase.sql.
-7. Zaloguj Desktop i Android na to samo konto.
-8. Test rekordu: utwórz testowe zlecenie na PC -> synchronizuj -> sprawdź tablet.
-9. Test zdjęcia: tablet / PRZYJĘCIE -> Cloud -> PC.
-10. Test kategorii: dodaj zdjęcia DIAGNOZA i NAPRAWA; sprawdź ich podział na obu urządzeniach.
-11. Test usunięcia: usuń jedno testowe zdjęcie na tablecie -> synchronizuj -> sprawdź, czy znika z PC. Potem odwrotnie.
-12. Test PDF offline na Androidzie: Dokumenty -> Otwórz PDF bez Wi-Fi.
-13. Test backupu desktop: Ustawienia -> Dane i backup; sprawdź automatyczną kopię.
-14. Dopiero po tych testach przechodzimy do rzeczywistych danych klientów.
+1. Rozpakuj paczkę do osobnego katalogu. Porównaj z lokalnymi zmianami z PC.
+2. Użyj Node 22 LTS lub Node 24.
+3. npm ci
+4. npm run check:source
+5. npm test
+6. npm run check:release-version -- 0.31.0
+7. Uruchom development build Androida przez npx expo start albo zbuduj APK.
+8. Lokalny APK: cd android, następnie ./gradlew assembleRelease.
+   W PowerShell: .\gradlew.bat assembleRelease.
+9. Użyj dotychczasowego klucza podpisującego, aby zainstalować aktualizację.
+10. Wykonaj testy na telefonie/tablecie opisane w ZMIANY_0.31.0.md.
 
-Nie kopiuj service_role do żadnej aplikacji klienckiej.
+Szczegółowa lista zmian, wymagania i ograniczenia: ZMIANY_0.31.0.md.
+Kod nie został wysłany do GitHuba. W tej paczce nie ma nowego APK.
+Wersja PC pozostaje bez zmian.

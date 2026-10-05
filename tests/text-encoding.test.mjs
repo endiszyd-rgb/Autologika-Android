@@ -49,3 +49,13 @@ test('magazyn pokazuje synchronizowaną historię dokumentów dostaw',()=>{
  assert.match(app,/Szukaj dokumentu/)
  assert.match(app,/Otwórz skan/)
 })
+
+test('telefon pokazuje gotowe i własne szablony prac',()=>{
+ const app=readFileSync('App.js','utf8')
+ const library=readFileSync(join('src','workshop-review-ui.js'),'utf8')
+ assert.match(app,/\['repairBase','Szablony prac'\]/)
+ assert.match(app,/MOBILE_PRIMARY=.*'repairBase'/)
+ assert.match(library,/Gotowe szablony/)
+ assert.match(library,/Moje szablony/)
+ assert.match(library,/list\('work_templates'\)/)
+})

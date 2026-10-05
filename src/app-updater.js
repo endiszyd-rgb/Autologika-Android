@@ -1,5 +1,14 @@
 export const ANDROID_RELEASE_API='https://api.github.com/repos/endiszyd-rgb/Autologika-Android/releases/latest'
 
+export async function fetchReleaseUpdate(currentVersion,{fetcher=globalThis.fetch,timeoutMs=12000}={}){
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),timeoutMs)
+ try{
+  const response=await fetcher(ANDROID_RELEASE_API,{headers:{Accept:'application/vnd.github+json'},signal:controller.signal})
+  if(!response.ok)throw new Error(`Serwer aktualizacji zwrócił HTTP ${response.status}.`)
+  return releaseUpdate(await response.json(),currentVersion)
+ }finally{clearTimeout(timeout)}
+}
+
 export const versionParts=value=>{const parts=String(value||'0').trim().replace(/^v/i,'').split(/[.-]/);return Array.from({length:3},(_,index)=>Number.parseInt(parts[index],10)||0)}
 
 export function compareVersions(left,right){

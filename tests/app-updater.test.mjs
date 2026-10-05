@@ -1,5 +1,11 @@
 import test from 'node:test'
+import {fetchReleaseUpdate} from '../src/app-updater.js'
 import assert from 'node:assert/strict'
+
+test('sprawdzanie aktualizacji obsługuje błąd HTTP i kończy próbę bez sieci',async()=>{
+ await assert.rejects(fetchReleaseUpdate('0.30.15',{fetcher:async()=>({ok:false,status:503})}),/HTTP 503/)
+ await assert.rejects(fetchReleaseUpdate('0.30.15',{timeoutMs:5,fetcher:async(_url,{signal})=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('offline timeout'))))}),/offline timeout/)
+})
 import {compareVersions,releaseUpdate,shortReleaseNotes} from '../src/app-updater.js'
 
 test('porównuje wersje liczbami zamiast tekstowo',()=>{

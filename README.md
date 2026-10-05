@@ -1,4 +1,13 @@
-# Autologika Android 0.30.0
+# Autologika Android 0.31.0
+
+## Zmiany 0.31.0
+
+Nowe kafelki zleceń, terminarz dnia i tygodnia, czytelna baza procedur,
+osobne QC naprawy i wydania, kontrola pojazdu wpływająca na jego ocenę,
+historia wszystkich napraw i automatyczne powiadomienia o aktualizacji.
+
+Pełna lista zmian oraz instrukcja uruchomienia i testów:
+[ZMIANY_0.31.0.md](ZMIANY_0.31.0.md).
 
 ## Nowe w 0.30.0
 
