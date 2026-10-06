@@ -1,4 +1,5 @@
 import {procedureProgress} from './work-templates.js'
+import {sameRecordId} from './record-id.js'
 
 const CLOSED_PART_STATES=new Set(['ZAMONTOWANE','ZWROT_ZAKONCZONY','ANULOWANE'])
 const STEP_STATUS={intake:'PRZYJETE',diagnosis:'DIAGNOZA',quote:'WYCENA',approval:'AKCEPTACJA',repair:'NAPRAWA',repairQc:'QC_NAPRAWY',payment:'PLATNOSC',releaseQc:'QC_WYDANIA',release:'GOTOWE'}
@@ -44,4 +45,9 @@ export function deriveMobileOrderWorkflow({order={},diagnosis={},approvals=[],pa
  const suggestedStatus=next?STEP_STATUS[next.key]:'GOTOWE'
  const copy={intake:['Uzupełnij przyjęcie','Dodaj pojazd, temat i zgłoszenie klienta.'],diagnosis:['Opisz rozpoznaną usterkę','Podstawowy opis wystarczy, aby przygotować zakres.'],quote:['Przygotuj wycenę','Dodaj zakres prac i potrzebne części.'],approval:['Zapisz decyzję klienta','Potwierdź zaakceptowaną kwotę i zakres prac.'],repair:['Wykonaj naprawę','Zarejestruj czas pracy i wykonaj punkty dodanych procedur.'],repairQc:['Sprawdź wykonaną naprawę','Potwierdź kontrolę wykonanej naprawy.'],releaseQc:['Wykonaj QC przed wydaniem','Potwierdź końcową kontrolę pojazdu.'],payment:['Rozlicz płatność','Zapisane wpłaty muszą pokryć wartość zlecenia.'],release:['Wydaj pojazd','Zapisz zalecenia i ustaw status zlecenia na GOTOWE.']}
  return {steps,next:next?{...next,title:copy[next.key][0],detail:copy[next.key][1]}:null,done:steps.filter(step=>step.done).length,total:steps.length,complete:steps.every(step=>step.done),paid,due:Math.max(0,Number(total||0)-paid),status:order.status||'PRZYJETE',suggestedStatus}
+}
+
+export function deriveOrderWorkflows({orders=[],diagnostics=[],notes=[],parts=[],items=[],payments=[],logs=[],approvals=[],qc=[],procedures=[]}={}){
+ const linked=(rows,id)=>rows.filter(row=>sameRecordId(row?.payload?.order_cloud_id,id))
+ return Object.fromEntries(orders.map(row=>{const id=row.cloud_id,payload=row.payload||{},orderItems=linked(items,id),calculated=orderItems.reduce((sum,item)=>sum+Number(item.payload?.qty||1)*Number(item.payload?.unit_price||0),0),total=payload.final_price===null||payload.final_price===undefined?(orderItems.length?calculated:Number(payload.total||0)):Number(payload.final_price);return [String(id),deriveMobileOrderWorkflow({order:payload,diagnosis:linked(diagnostics,id)[0]?.payload||{},notes:linked(notes,id)[0]?.payload||{},parts:linked(parts,id),items:orderItems,payments:linked(payments,id),logs:linked(logs,id),approvals:linked(approvals,id),qc:linked(qc,id),procedures:linked(procedures,id),total})]}))
 }

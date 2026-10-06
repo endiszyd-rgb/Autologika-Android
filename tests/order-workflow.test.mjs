@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {deriveMobileOrderWorkflow} from '../src/order-workflow.js'
+import {deriveMobileOrderWorkflow,deriveOrderWorkflows} from '../src/order-workflow.js'
 
 const complete={order:{status:'GOTOWE'},diagnosis:{symptom_confirmed:'Uszkodzony czujnik'},approvals:[{cloud_id:'1',payload:{status:'APPROVED',decided_at:'2026-09-22'}}],parts:[],items:[{cloud_id:'item'}],logs:[{payload:{ended_at:'2026-09-22',duration_minutes:45}}],payments:[{payload:{amount:500}}],qc:[{payload:{key:'documents',checked:true}},{payload:{key:'final',checked:true}}],notes:{release_notes:'Zalecenia przekazane'},total:500}
 
@@ -63,4 +63,14 @@ test('workflow odczytuje klucze kontroli jakości zapisane przez PC',()=>{
  assert.equal(workflow.steps.find(step=>step.key==='repairQc').done,true)
  assert.equal(workflow.steps.find(step=>step.key==='releaseQc').done,true)
  assert.equal(workflow.complete,true)
+})
+
+test('lista zleceń wylicza niezależny postęp każdego zlecenia',()=>{
+ const orders=[{cloud_id:'o1',payload:{status:'PRZYJETE'}},{cloud_id:2,payload:{status:'WYCENA',total:100}}]
+ const diagnostics=[{payload:{order_cloud_id:'o1',conclusion:'Usterka'}},{payload:{order_cloud_id:'2',conclusion:'Usterka'}}]
+ const items=[{payload:{order_cloud_id:2,name:'Naprawa',qty:1,unit_price:100}}]
+ const result=deriveOrderWorkflows({orders,diagnostics,items})
+ assert.equal(result.o1.next.key,'quote')
+ assert.equal(result['2'].next.key,'approval')
+ assert.equal(result['2'].due,100)
 })
