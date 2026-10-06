@@ -4,6 +4,26 @@ const arrayValue=value=>{
   try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return []}
 }
 
+const lineText=value=>arrayValue(value).map(item=>typeof item==='string'?item:item?.name||item?.text||item?.title||'').filter(Boolean).join('\n')
+const lines=value=>String(value||'').split(/\r?\n/).map(item=>item.trim()).filter(Boolean)
+const decimal=value=>Number(String(value??'').trim().replace(',','.'))
+
+export function workTemplateForm(record){
+  if(!record)return {id:'',name:'',group_name:'Własne',variant:'standard',scope:'',hours:'1',rate:'220',pre:'',steps:'',qc:'',parts:'',materials:'',recommendations:'',safety:''}
+  const value=normalizeWorkTemplate(record)
+  return {id:value.id,name:value.name,group_name:value.group,variant:value.variant,scope:value.scope,hours:String(value.hours),rate:String(value.rate),pre:lineText(value.pre),steps:lineText(value.steps),qc:lineText(value.qc),parts:lineText(value.parts),materials:lineText(value.materials),recommendations:lineText(value.recommendations),safety:lineText(value.safety)}
+}
+
+export function workTemplatePayload(form){
+  const name=String(form?.name||'').trim(),hours=decimal(form?.hours),rate=decimal(form?.rate)
+  if(!name)throw new Error('Podaj nazwę szablonu.')
+  if(!Number.isFinite(hours)||hours<=0)throw new Error('Czas pracy musi być większy od zera.')
+  if(!Number.isFinite(rate)||rate<0)throw new Error('Stawka nie może być ujemna.')
+  const json=value=>JSON.stringify(lines(value))
+  const itemJson=value=>JSON.stringify(lines(value).map(item=>({name:item,qty:1,selected:true})))
+  return {name,group_name:String(form?.group_name||'Własne').trim()||'Własne',variant:String(form?.variant||'standard').trim()||'standard',scope:String(form?.scope||'').trim(),hours,rate,pre_json:json(form?.pre),steps_json:json(form?.steps),qc_json:json(form?.qc),parts_json:itemJson(form?.parts),materials_json:itemJson(form?.materials),recommendations_json:json(form?.recommendations),safety_json:json(form?.safety),active:1}
+}
+
 export function normalizeWorkTemplate(record){
   const payload=record?.payload||record||{}
   const id=String(record?.cloud_id||payload.cloud_id||payload.id||'')
