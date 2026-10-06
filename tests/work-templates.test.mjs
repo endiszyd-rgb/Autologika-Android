@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {normalizeWorkTemplate,suggestedPartPayloads,workProcedureRunPayload,workTemplateForm,workTemplateOrderItem,workTemplatePayload} from '../src/work-templates.js'
+import {normalizeProcedureRun,normalizeWorkTemplate,procedureProgress,procedureProgressPayload,suggestedPartPayloads,workProcedureRunPayload,workTemplateForm,workTemplateOrderItem,workTemplatePayload} from '../src/work-templates.js'
 import {catalogRows,WORK_CATALOG} from '../src/work-catalog.js'
 
 test('normalizes a synchronized desktop work template',()=>{
@@ -29,6 +29,16 @@ test('creates a PC-compatible procedure run and suggested parts',()=>{
   assert.deepEqual(JSON.parse(run.progress_json),{'steps:0':false,'steps:1':false,'qc:0':false})
   assert.deepEqual(JSON.parse(run.parts_json),[{name:'Czujnik',qty:2,selected:true}])
   assert.deepEqual(suggestedPartPayloads(item,'order-1'),[{order_cloud_id:'order-1',part_no:'',name:'Czujnik',qty:2,unit_cost:0,unit_price:0,status:'DO_ZAMOWIENIA',notes:'Sugestia z procedury: Test DPF — pełna'}])
+})
+
+test('reads and updates procedure checklist progress synchronized with PC',()=>{
+  const record={cloud_id:'run-1',payload:{title:'Naprawa',pre_json:'["Przygotuj"]',steps_json:'["Zdemontuj","Zamontuj"]',qc_json:'["Sprawdź"]',progress_json:'{"pre:0":true,"steps:0":true}'}}
+  const run=normalizeProcedureRun(record)
+  assert.equal(run.id,'run-1')
+  assert.deepEqual(procedureProgress(run),{done:2,total:4,percent:50,complete:false})
+  const changed=procedureProgressPayload(run,'steps:1',true)
+  assert.equal(JSON.parse(changed.progress_json)['steps:1'],true)
+  assert.equal(procedureProgress({pre:run.pre,steps:run.steps,qc:run.qc,progress_json:changed.progress_json}).done,3)
 })
 
 test('creates a synchronized template payload from the Android editor',()=>{

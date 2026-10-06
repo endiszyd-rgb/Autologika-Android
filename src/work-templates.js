@@ -3,6 +3,7 @@ const arrayValue=value=>{
   if(typeof value!=='string'||!value.trim())return []
   try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return []}
 }
+const objectValue=value=>{if(value&&typeof value==='object'&&!Array.isArray(value))return value;if(typeof value!=='string'||!value.trim())return {};try{const parsed=JSON.parse(value);return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{}}catch{return {}}}
 
 const lineText=value=>arrayValue(value).map(item=>typeof item==='string'?item:item?.name||item?.text||item?.title||'').filter(Boolean).join('\n')
 const lines=value=>String(value||'').split(/\r?\n/).map(item=>item.trim()).filter(Boolean)
@@ -87,4 +88,19 @@ export function workProcedureRunPayload(item,orderId,orderItemId){
 
 export function suggestedPartPayloads(item,orderId){
   return (item?.procedure?.parts||[]).filter(part=>part?.selected!==false).map(part=>({order_cloud_id:orderId,part_no:String(part?.part_no||''),name:String(part?.name||part||'Część').trim(),qty:Math.max(1,Math.round(Number(part?.qty)||1)),unit_cost:0,unit_price:0,status:'DO_ZAMOWIENIA',notes:`Sugestia z procedury: ${item.name}${part?.note?` · ${part.note}`:''}`}))
+}
+
+export function normalizeProcedureRun(record){
+  const payload=record?.payload||record||{}
+  return {id:String(record?.cloud_id||payload.cloud_id||payload.id||''),title:String(payload.title||'Procedura'),variant:String(payload.variant||''),pre:arrayValue(payload.pre??payload.pre_json),steps:arrayValue(payload.steps??payload.steps_json),qc:arrayValue(payload.qc??payload.qc_json),parts:arrayValue(payload.parts??payload.parts_json),materials:arrayValue(payload.materials??payload.materials_json),recommendations:arrayValue(payload.recommendations??payload.recommendations_json),safety:arrayValue(payload.safety??payload.safety_json),progress:objectValue(payload.progress??payload.progress_json)}
+}
+
+export function procedureProgress(record){
+  const run=normalizeProcedureRun(record),keys=['pre','steps','qc'].flatMap(section=>run[section].map((_,index)=>`${section}:${index}`)),done=keys.filter(key=>run.progress[key]).length
+  return {done,total:keys.length,percent:keys.length?Math.round(done/keys.length*100):0,complete:keys.length>0&&done===keys.length}
+}
+
+export function procedureProgressPayload(record,key,checked){
+  const run=normalizeProcedureRun(record)
+  return {progress_json:JSON.stringify({...run.progress,[key]:Boolean(checked)})}
 }
