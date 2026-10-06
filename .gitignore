@@ -22,6 +22,7 @@ dist-dossier-check/
 dist-customer-check/
 dist-schedule-check/
 dist-schedule-release-check/
+dist-release-check/
 dist-delivery-check*/
 dist-phone-check/
 dist-orders-crash-check/
