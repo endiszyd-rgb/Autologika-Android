@@ -6,6 +6,7 @@ node_modules/
 .kotlin/
 artifacts/
 dist-ui-check*/
+dist-ui-stage4-*/
 dist-sync-check/
 dist-conflict-check/
 dist-finance-check/
