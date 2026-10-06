@@ -47,15 +47,20 @@ export function normalizeWorkTemplate(record){
 
 export function workTemplateOrderItem(template,orderId){
   const value=normalizeWorkTemplate(template)
+  const total=value.hours*value.rate
   return {
     order_cloud_id:orderId,
     kind:'ROBOCIZNA',
     name:`${value.name} — ${value.variant}`,
-    qty:1,
-    unit_price:value.hours*value.rate,
+    qty:value.hours,
+    unit_price:value.rate,
     unit_cost:0,
     labor_hours:value.hours,
     customer_description:value.scope,
+    work_name:value.name,
+    variant_name:value.variant,
+    hours_snapshot:value.hours,
+    price_snapshot:total,
     template_key:`custom:${value.id}`,
     procedure:{
       title:value.name,
@@ -70,4 +75,16 @@ export function workTemplateOrderItem(template,orderId){
       safety:value.safety
     }
   }
+}
+
+const jsonArray=value=>JSON.stringify(Array.isArray(value)?value:[])
+
+export function workProcedureRunPayload(item,orderId,orderItemId){
+  const procedure=item?.procedure||{},progress={}
+  for(const section of ['pre','steps','qc'])for(let index=0;index<(procedure[section]||[]).length;index++)progress[`${section}:${index}`]=false
+  return {order_cloud_id:orderId,order_item_cloud_id:orderItemId,template_key:item.template_key||'',title:procedure.title||item.work_name||item.name||'Procedura',variant:procedure.variant||item.variant_name||'',pre_json:jsonArray(procedure.pre),steps_json:jsonArray(procedure.steps),qc_json:jsonArray(procedure.qc),recommendations_json:jsonArray(procedure.recommendations),safety_json:jsonArray(procedure.safety),parts_json:jsonArray((procedure.parts||[]).filter(part=>part?.selected!==false)),materials_json:jsonArray((procedure.materials||[]).filter(material=>material?.selected!==false)),technical_json:jsonArray(procedure.technical),progress_json:JSON.stringify(progress),catalog_work_id:item.catalog_work_id||null,catalog_variant_id:item.catalog_variant_id||null,technical_description:item.technical_description||procedure.technicalDescription||'',technical_data_key:procedure.technicalDataKey||null}
+}
+
+export function suggestedPartPayloads(item,orderId){
+  return (item?.procedure?.parts||[]).filter(part=>part?.selected!==false).map(part=>({order_cloud_id:orderId,part_no:String(part?.part_no||''),name:String(part?.name||part||'Część').trim(),qty:Math.max(1,Math.round(Number(part?.qty)||1)),unit_cost:0,unit_price:0,status:'DO_ZAMOWIENIA',notes:`Sugestia z procedury: ${item.name}${part?.note?` · ${part.note}`:''}`}))
 }

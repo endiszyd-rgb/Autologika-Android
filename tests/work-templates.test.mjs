@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {normalizeWorkTemplate,workTemplateForm,workTemplateOrderItem,workTemplatePayload} from '../src/work-templates.js'
+import {normalizeWorkTemplate,suggestedPartPayloads,workProcedureRunPayload,workTemplateForm,workTemplateOrderItem,workTemplatePayload} from '../src/work-templates.js'
 import {catalogRows,WORK_CATALOG} from '../src/work-catalog.js'
 
 test('normalizes a synchronized desktop work template',()=>{
@@ -13,10 +13,22 @@ test('normalizes a synchronized desktop work template',()=>{
 test('creates an order item with price and complete procedure',()=>{
   const item=workTemplateOrderItem({cloud_id:'abc',payload:{name:'Test',variant:'standard',hours:2,rate:180,pre_json:'["Przygotuj"]',parts_json:'[{"name":"Czujnik"}]'}},'order-1')
   assert.equal(item.order_cloud_id,'order-1')
-  assert.equal(item.unit_price,360)
+  assert.equal(item.qty,2)
+  assert.equal(item.unit_price,180)
+  assert.equal(item.price_snapshot,360)
   assert.equal(item.template_key,'custom:abc')
   assert.deepEqual(item.procedure.pre,['Przygotuj'])
   assert.deepEqual(item.procedure.parts,[{name:'Czujnik'}])
+})
+
+test('creates a PC-compatible procedure run and suggested parts',()=>{
+  const item=workTemplateOrderItem({cloud_id:'abc',payload:{name:'Test DPF',variant:'pełna',hours:1.5,rate:200,steps_json:'["Odczytaj DTC","Zmierz ciśnienie"]',qc_json:'["Zapisz wynik"]',parts_json:'[{"name":"Czujnik","qty":2,"selected":true},{"name":"Opcjonalny","selected":false}]'}},'order-1')
+  const run=workProcedureRunPayload(item,'order-1','item-1')
+  assert.equal(run.order_item_cloud_id,'item-1')
+  assert.equal(run.title,'Test DPF')
+  assert.deepEqual(JSON.parse(run.progress_json),{'steps:0':false,'steps:1':false,'qc:0':false})
+  assert.deepEqual(JSON.parse(run.parts_json),[{name:'Czujnik',qty:2,selected:true}])
+  assert.deepEqual(suggestedPartPayloads(item,'order-1'),[{order_cloud_id:'order-1',part_no:'',name:'Czujnik',qty:2,unit_cost:0,unit_price:0,status:'DO_ZAMOWIENIA',notes:'Sugestia z procedury: Test DPF — pełna'}])
 })
 
 test('creates a synchronized template payload from the Android editor',()=>{
