@@ -1,6 +1,7 @@
 import {procedureProgress} from './work-templates.js'
 
 const CLOSED_PART_STATES=new Set(['ZAMONTOWANE','ZWROT_ZAKONCZONY','ANULOWANE'])
+const STEP_STATUS={intake:'PRZYJETE',diagnosis:'DIAGNOZA',quote:'WYCENA',approval:'AKCEPTACJA',repair:'NAPRAWA',repairQc:'QC_NAPRAWY',payment:'PLATNOSC',releaseQc:'QC_WYDANIA',release:'GOTOWE'}
 
 export const MOBILE_ORDER_STEPS=[
  ['intake','Przyjęcie','overview'],
@@ -40,6 +41,7 @@ export function deriveMobileOrderWorkflow({order={},diagnosis={},approvals=[],pa
  const state={intake:intakeDone,diagnosis:diagnosisDone,quote:quoteDone,approval:approvalDone,repair:repairDone,repairQc:repairQcDone,releaseQc:releaseQcDone,payment:paymentDone,release:releaseDone}
  const steps=MOBILE_ORDER_STEPS.map(([key,label,tab])=>({key,label,tab,done:Boolean(state[key])}))
  const next=steps.find(step=>!step.done)||null
+ const suggestedStatus=next?STEP_STATUS[next.key]:'GOTOWE'
  const copy={intake:['Uzupełnij przyjęcie','Dodaj pojazd, temat i zgłoszenie klienta.'],diagnosis:['Opisz rozpoznaną usterkę','Podstawowy opis wystarczy, aby przygotować zakres.'],quote:['Przygotuj wycenę','Dodaj zakres prac i potrzebne części.'],approval:['Zapisz decyzję klienta','Potwierdź zaakceptowaną kwotę i zakres prac.'],repair:['Wykonaj naprawę','Zarejestruj czas pracy i wykonaj punkty dodanych procedur.'],repairQc:['Sprawdź wykonaną naprawę','Potwierdź kontrolę wykonanej naprawy.'],releaseQc:['Wykonaj QC przed wydaniem','Potwierdź końcową kontrolę pojazdu.'],payment:['Rozlicz płatność','Zapisane wpłaty muszą pokryć wartość zlecenia.'],release:['Wydaj pojazd','Zapisz zalecenia i ustaw status zlecenia na GOTOWE.']}
- return {steps,next:next?{...next,title:copy[next.key][0],detail:copy[next.key][1]}:null,done:steps.filter(step=>step.done).length,total:steps.length,complete:steps.every(step=>step.done),paid,due:Math.max(0,Number(total||0)-paid),status:order.status||'PRZYJETE'}
+ return {steps,next:next?{...next,title:copy[next.key][0],detail:copy[next.key][1]}:null,done:steps.filter(step=>step.done).length,total:steps.length,complete:steps.every(step=>step.done),paid,due:Math.max(0,Number(total||0)-paid),status:order.status||'PRZYJETE',suggestedStatus}
 }

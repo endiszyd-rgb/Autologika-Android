@@ -7,12 +7,14 @@ const complete={order:{status:'GOTOWE'},diagnosis:{symptom_confirmed:'Uszkodzony
 test('nowe zlecenie po przyjęciu przechodzi do podstawowej diagnozy',()=>{
  const result=deriveMobileOrderWorkflow({order:{status:'PRZYJETE'}})
  assert.equal(result.next.key,'diagnosis')
+ assert.equal(result.suggestedStatus,'DIAGNOZA')
  assert.equal(result.done,1)
 })
 
 test('zakończona praca poprzedza QC naprawy i płatność',()=>{
  const result=deriveMobileOrderWorkflow({...complete,logs:[]})
  assert.equal(result.next.key,'repair')
+ assert.equal(result.suggestedStatus,'NAPRAWA')
  assert.equal(result.steps.find(step=>step.key==='repair').done,false)
  assert.equal(result.steps.find(step=>step.key==='repairQc').done,false)
  assert.equal(result.steps.find(step=>step.key==='payment').done,false)
@@ -26,6 +28,7 @@ test('niewykonana procedura blokuje zakończenie naprawy',()=>{
  assert.equal(result.steps.find(step=>step.key==='repairQc').done,false)
  const completed=deriveMobileOrderWorkflow({...complete,procedures:[{payload:{...procedures[0].payload,progress_json:'{"steps:0":true,"steps:1":true}'}}]})
  assert.equal(completed.steps.find(step=>step.key==='repair').done,true)
+ assert.equal(completed.suggestedStatus,'GOTOWE')
  assert.equal(completed.complete,true)
 })
 
