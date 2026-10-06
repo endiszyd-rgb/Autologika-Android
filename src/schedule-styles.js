@@ -2,9 +2,13 @@ import {StyleSheet} from 'react-native'
 
 export default StyleSheet.create({
  hero:{padding:16,borderWidth:1,borderColor:'#405341',borderRadius:15,backgroundColor:'#111a13',marginBottom:12},
+ heroPhone:{padding:13,borderRadius:13},
  heroTitle:{color:'#f2f7ef',fontSize:22,fontWeight:'950',marginTop:5},
+ heroTitlePhone:{fontSize:25},
  heroStats:{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:13},
+ heroStatsPhone:{alignItems:'stretch'},
  stat:{minWidth:105,flex:1,padding:10,borderWidth:1,borderColor:'#334239',borderRadius:10,backgroundColor:'#0a100c'},
+ statPhone:{minWidth:'30%',paddingHorizontal:8},
  statValue:{color:'#d9efc8',fontSize:18,fontWeight:'950'},
  statLabel:{color:'#91a095',fontSize:10,fontWeight:'900',letterSpacing:.8,marginTop:4},
  quickDates:{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:11},
@@ -19,6 +23,7 @@ export default StyleSheet.create({
  status:{paddingHorizontal:9,paddingVertical:6,borderRadius:12,overflow:'hidden',backgroundColor:'#1d2a1e',color:'#b8ee84',fontSize:10,fontWeight:'950'},
  actions:{flexDirection:'row',flexWrap:'wrap',gap:7,justifyContent:'flex-end',marginTop:11,paddingTop:10,borderTopWidth:1,borderTopColor:'#29342c'},
  form:{padding:13,borderWidth:1,borderColor:'#465b43',borderRadius:12,backgroundColor:'#0e1710',marginBottom:12},
+ formPhone:{padding:10,borderWidth:0,backgroundColor:'transparent'},
  orderPicker:{padding:13,marginBottom:14,borderWidth:1,borderColor:'#40523c',borderRadius:13,backgroundColor:'#101812'},
  orderPickerHead:{flexDirection:'row',alignItems:'center',gap:12,marginBottom:11},
  orderPickerTitle:{color:'#f0f6ec',fontSize:16,fontWeight:'950',marginTop:4},
