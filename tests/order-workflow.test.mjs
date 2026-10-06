@@ -12,9 +12,21 @@ test('nowe zlecenie po przyjęciu przechodzi do podstawowej diagnozy',()=>{
 
 test('zakończona praca poprzedza QC naprawy i płatność',()=>{
  const result=deriveMobileOrderWorkflow({...complete,logs:[]})
- assert.equal(result.next.key,'repairQc')
+ assert.equal(result.next.key,'repair')
+ assert.equal(result.steps.find(step=>step.key==='repair').done,false)
  assert.equal(result.steps.find(step=>step.key==='repairQc').done,false)
  assert.equal(result.steps.find(step=>step.key==='payment').done,false)
+})
+
+test('niewykonana procedura blokuje zakończenie naprawy',()=>{
+ const procedures=[{payload:{steps_json:'["Demontaż","Montaż"]',progress_json:'{"steps:0":true,"steps:1":false}'}}]
+ const result=deriveMobileOrderWorkflow({...complete,procedures})
+ assert.equal(result.next.key,'repair')
+ assert.equal(result.steps.find(step=>step.key==='repair').done,false)
+ assert.equal(result.steps.find(step=>step.key==='repairQc').done,false)
+ const completed=deriveMobileOrderWorkflow({...complete,procedures:[{payload:{...procedures[0].payload,progress_json:'{"steps:0":true,"steps:1":true}'}}]})
+ assert.equal(completed.steps.find(step=>step.key==='repair').done,true)
+ assert.equal(completed.complete,true)
 })
 
 test('najnowsza decyzja klienta zastępuje wcześniejszą akceptację',()=>{
