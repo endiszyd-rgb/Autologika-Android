@@ -1,9 +1,11 @@
 import * as SecureStore from 'expo-secure-store'
 import * as FileSystem from 'expo-file-system/legacy'
-import { dirty, markClean, metaGet, metaSet, put, db } from './db'
+import * as Crypto from 'expo-crypto'
+import { dirty, markClean, metaGet, metaSet, put, patch, db } from './db'
 import { assertCloudOwner, needsFullReplay, remoteHeadsRoute, remotePageRoute, remoteWins, shouldApplyRemote } from './cloud-sync-model'
 import {normalizePartPayload} from './part-quantity'
 import {canonicalEntityType,normalizeSyncPayload} from './sync-contract'
+import {APPROVAL_PUBLIC_URL,canonicalJson,remoteApprovalPayload} from './remote-approval-model'
 
 const K='autologika_cloud_config_v2', S='autologika_cloud_session_v2'
 export async function loadCloud(){ try{return JSON.parse(await SecureStore.getItemAsync(K)||'{}')}catch{return {}} }
@@ -24,6 +26,33 @@ async function headers(c,extra={}){const token=await sessionToken(c);return {'ap
 async function req(c,path,opt={}){const r=await fetch(base(c)+path,{...opt,headers:{...(await headers(c)),...(opt.headers||{})}});if(!r.ok)throw new Error(`Cloud ${r.status}: ${(await r.text()).slice(0,350)}`);if(r.status===204)return null;const t=await r.text();return t?JSON.parse(t):null}
 export async function testConnection(){const c=await loadCloud();if(!ok(c))throw new Error('Uzupełnij poprawny Project URL i Publishable key Supabase.');let r;try{r=await fetch(base(c)+'/auth/v1/settings',{headers:{apikey:c.key}})}catch(e){throw new Error(`Brak połączenia z ${base(c)}: ${e?.message||e}`)}const t=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${t.slice(0,300)}`);return {ok:true,status:r.status}}
 export async function currentAccount(){const c=await loadCloud(),s=await loadSession();return {configured:ok(c),loggedIn:!!s?.access_token,email:s?.user?.email||'',userId:s?.user?.id||'',workshopId:s?.user?.id||c.workshopId||''}}
+
+const approvalFields='id,approval_local_id,status,customer_note,decided_at,created_at,expires_at,snapshot,snapshot_hash,hash_algorithm,terms_version,terms_text,signature_storage_path,signature_hash,pdf_storage_path,pdf_hash,client_user_agent,document_no,approval_sequence,previously_approved_total,security_event'
+const hex=bytes=>Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('')
+async function sha256(value){return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,String(value))}
+
+export async function approvalDeploymentStatus(){
+ const c=await loadCloud();if(!ok(c))return {ok:false,message:'Skonfiguruj Autologika Cloud w Ustawieniach.'}
+ try{await req(c,'/rest/v1/customer_approval_links?select=id&limit=1',{method:'GET'});const edge=await fetch(`${base(c)}/functions/v1/approval`,{method:'GET',headers:await headers(c)});if(edge.status===404)throw new Error('Brakuje funkcji approval w Supabase. Wdróż Edge Function approval.');return {ok:true}}
+ catch(error){return {ok:false,message:/customer_approval_links|PGRST205|schema cache/i.test(String(error?.message||error))?'Brakuje tabeli zdalnych akceptacji w Supabase. Uruchom migrację Remote Approval 2.0.':String(error?.message||error)}}
+}
+
+export async function createRemoteApproval({approvalId,approvalLocalId,orderLocalId,snapshot}){
+ const deployment=await approvalDeploymentStatus();if(!deployment.ok)throw new Error(deployment.message)
+ const c=await loadCloud(),account=await currentAccount();if(!account.loggedIn||!account.workshopId)throw new Error('Zaloguj się do Autologika Cloud.')
+ const token=hex(await Crypto.getRandomBytesAsync(32)),tokenHash=await sha256(token),snapshotHash=await sha256(canonicalJson(snapshot)),expiresAt=new Date(Date.now()+7*24*60*60*1000).toISOString()
+ const row={workshop_id:account.workshopId,token:tokenHash,token_hash:tokenHash,approval_local_id:Number(approvalLocalId),approval_cloud_id:/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(approvalId))?approvalId:null,order_local_id:Number(orderLocalId),order_cloud_id:null,snapshot,snapshot_hash:snapshotHash,hash_algorithm:'SHA-256',terms_version:snapshot.terms.version,terms_text:snapshot.terms.text,document_no:snapshot.approvalDocumentNo,approval_sequence:Number(snapshot.approvalSequence||1),previously_approved_total:Number(snapshot.previouslyApprovedTotal||0),expires_at:expiresAt}
+ const result=await req(c,'/rest/v1/customer_approval_links',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(row)}),remote=Array.isArray(result)?result[0]:result
+ await patch('approvals',approvalId,{...remoteApprovalPayload({...row,...remote}),remote_local_id:Number(approvalLocalId)})
+ return {ok:true,url:`${APPROVAL_PUBLIC_URL}${token}`,expiresAt,snapshotHash,remoteId:remote?.id||null}
+}
+
+export async function pullRemoteApproval(approvalId,approvalLocalId){
+ const c=await loadCloud(),account=await currentAccount();if(!account.loggedIn||!account.workshopId)throw new Error('Zaloguj się do Autologika Cloud.')
+ const rows=await req(c,`/rest/v1/customer_approval_links?select=${approvalFields}&approval_local_id=eq.${Number(approvalLocalId)}&workshop_id=eq.${encodeURIComponent(account.workshopId)}&order=created_at.desc&limit=1`,{method:'GET'})||[]
+ if(!rows[0])return {ok:false,reason:'NOT_FOUND'}
+ const payload=remoteApprovalPayload(rows[0]);await patch('approvals',approvalId,{...payload,remote_local_id:Number(approvalLocalId)});return {ok:true,...payload}
+}
 
 const safeName=n=>String(n||'file').replace(/[^a-zA-Z0-9._-]+/g,'_').slice(-120)||'file'
 const encPath=p=>String(p||'').split('/').map(encodeURIComponent).join('/')
