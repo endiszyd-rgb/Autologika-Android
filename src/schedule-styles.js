@@ -1,9 +1,9 @@
 import {StyleSheet} from 'react-native'
 
 export default StyleSheet.create({
- hero:{padding:16,borderWidth:1,borderColor:'#405341',borderRadius:15,backgroundColor:'#111a13',marginBottom:12},
+ hero:{padding:16,borderWidth:1,borderColor:'#405341',borderRadius:15,backgroundColor:'#1D161A',marginBottom:12},
  heroPhone:{padding:13,borderRadius:13},
- heroTitle:{color:'#f2f7ef',fontSize:22,fontWeight:'950',marginTop:5},
+ heroTitle:{color:'#F7F2F4',fontSize:22,fontWeight:'950',marginTop:5},
  heroTitlePhone:{fontSize:25},
  heroStats:{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:13},
  heroStatsPhone:{alignItems:'stretch'},
@@ -28,20 +28,20 @@ export default StyleSheet.create({
  orderPickerHead:{flexDirection:'row',alignItems:'center',gap:12,marginBottom:11},
  orderPickerTitle:{color:'#f0f6ec',fontSize:16,fontWeight:'950',marginTop:4},
  noOrder:{paddingHorizontal:11,paddingVertical:8,borderWidth:1,borderColor:'#435047',borderRadius:9,backgroundColor:'#111814'},
- noOrderOn:{borderColor:'#a7dd68',backgroundColor:'#b9ef79'},
- noOrderText:{color:'#a8b3aa',fontSize:11,fontWeight:'900'},
+ noOrderOn:{borderColor:'#a7dd68',backgroundColor:'#FF4651'},
+ noOrderText:{color:'#B7ADB2',fontSize:11,fontWeight:'900'},
  noOrderTextOn:{color:'#14200f'},
  orderGrid:{flexDirection:'row',flexWrap:'wrap',gap:9},
- orderCard:{width:'100%',minWidth:0,minHeight:132,padding:14,borderWidth:1,borderColor:'#35443a',borderRadius:12,backgroundColor:'#0a110d'},
+ orderCard:{width:'100%',minWidth:0,minHeight:132,padding:14,borderWidth:1,borderColor:'#4A3840',borderRadius:12,backgroundColor:'#0a110d'},
  orderCardSelected:{borderColor:'#a7dd68',backgroundColor:'#172318',shadowColor:'#a7dd68',shadowOpacity:.18,shadowRadius:10,elevation:4},
  orderCardPressed:{opacity:.78,transform:[{scale:.985}]},
  orderCardTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
  orderPlate:{color:'#edf6e8',fontSize:16,fontWeight:'950',letterSpacing:.2},
- orderSelected:{paddingHorizontal:7,paddingVertical:4,overflow:'hidden',borderRadius:10,backgroundColor:'#b9ef79',color:'#15200f',fontSize:7,fontWeight:'950',letterSpacing:.7},
+ orderSelected:{paddingHorizontal:7,paddingVertical:4,overflow:'hidden',borderRadius:10,backgroundColor:'#FF4651',color:'#15200f',fontSize:7,fontWeight:'950',letterSpacing:.7},
  orderVehicle:{color:'#b4c2b7',fontSize:12,fontWeight:'750',marginTop:4},
  orderTitle:{color:'#eff4ec',fontSize:14,fontWeight:'900',lineHeight:19,marginTop:9},
  orderWork:{color:'#aab7ac',fontSize:12,lineHeight:17,marginTop:5},
  orderCustomer:{color:'#89978d',fontSize:11,fontWeight:'700',marginTop:'auto',paddingTop:9},
- orderEmpty:{alignItems:'center',gap:4,padding:18,borderWidth:1,borderStyle:'dashed',borderColor:'#354238',borderRadius:10,backgroundColor:'#0b100d'},
+ orderEmpty:{alignItems:'center',gap:4,padding:18,borderWidth:1,borderStyle:'dashed',borderColor:'#4C3942',borderRadius:10,backgroundColor:'#110D10'},
  visitWork:{color:'#c5ddaF',fontSize:12,lineHeight:17,marginTop:7,paddingLeft:9,borderLeftWidth:2,borderLeftColor:'#91bd61'}
 })

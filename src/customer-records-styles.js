@@ -2,11 +2,11 @@ import {StyleSheet} from 'react-native'
 
 export default StyleSheet.create({
  grid:{flexDirection:'row',flexWrap:'wrap',gap:11},
- card:{width:'49%',minWidth:290,padding:15,borderWidth:1,borderColor:'#35443a',borderRadius:14,backgroundColor:'#101612',shadowColor:'#000',shadowOpacity:.22,shadowRadius:9,elevation:4},
+ card:{width:'49%',minWidth:290,padding:15,borderWidth:1,borderColor:'#4A3840',borderRadius:14,backgroundColor:'#171418',shadowColor:'#000',shadowOpacity:.22,shadowRadius:9,elevation:4},
  cardTop:{flexDirection:'row',alignItems:'flex-start',justifyContent:'space-between',gap:10},
- name:{color:'#f2f7ef',fontSize:18,fontWeight:'950'},
+ name:{color:'#F7F2F4',fontSize:18,fontWeight:'950'},
  company:{color:'#9bc975',fontSize:10,fontWeight:'850',marginTop:4},
- status:{paddingHorizontal:8,paddingVertical:5,borderRadius:12,overflow:'hidden',backgroundColor:'#1c2a1c',color:'#b8f07b',fontSize:8,fontWeight:'900'},
+ status:{paddingHorizontal:8,paddingVertical:5,borderRadius:12,overflow:'hidden',backgroundColor:'#35191F',color:'#FFB3B8',fontSize:8,fontWeight:'900'},
  contact:{marginTop:11,paddingTop:10,borderTopWidth:1,borderTopColor:'#2d3931',color:'#aab7ad',fontSize:10,fontWeight:'750'},
  metrics:{flexDirection:'row',gap:7,marginTop:11},
  metric:{flex:1,minHeight:48,justifyContent:'center',padding:8,borderWidth:1,borderColor:'#2f3b33',borderRadius:9,backgroundColor:'#0a100c'},

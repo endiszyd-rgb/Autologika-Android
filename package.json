@@ -1,6 +1,6 @@
 {
   "name": "autologika-android",
-  "version": "0.31.2",
+  "version": "0.31.3",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -13,19 +13,21 @@
     "build:apk": "eas build -p android --profile preview"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
     "buffer": "^6.0.3",
-    "expo": "~57.0.26",
+    "expo": "~57.0.27",
     "expo-application": "~57.0.3",
-    "expo-asset": "~57.0.18",
+    "expo-asset": "~57.0.19",
     "expo-camera": "~57.0.6",
     "expo-crypto": "~57.0.3",
     "expo-file-system": "~57.0.7",
+    "expo-font": "~57.0.4",
     "expo-image-picker": "~57.0.20",
     "expo-intent-launcher": "~57.0.1",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.22",
     "expo-speech-recognition": "^57.0.0",
-    "expo-sqlite": "~57.0.3",
+    "expo-sqlite": "~57.0.4",
     "expo-text-extractor": "^2.0.0",
     "polish-vehicle-registration-certificate-decoder": "^1.0.1",
     "react": "19.2.3",
