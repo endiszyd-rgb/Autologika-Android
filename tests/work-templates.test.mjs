@@ -68,7 +68,17 @@ test('rejects incomplete or invalid work templates',()=>{
 
 test('Android exposes the complete built-in work-template library',()=>{
   const rows=catalogRows()
-  assert.ok(WORK_CATALOG.length>=40)
-  assert.ok(rows.length>=1000)
+  assert.equal(WORK_CATALOG.length,71)
+  assert.equal(WORK_CATALOG.reduce((count,group)=>count+group.jobs.length,0),1072)
+  assert.equal(rows.length,2529)
   assert.ok(rows.every(row=>row.group&&row.job?.name&&row.variant?.name))
+  const key=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&|\+|\//g,' i ').replace(/\bi\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim()
+  for(const group of WORK_CATALOG){
+    assert.equal(new Set(group.jobs.map(job=>key(job.name))).size,group.jobs.length,`duplicate work in ${group.group}`)
+    for(const job of group.jobs)assert.equal(new Set(job.variants.map(variant=>key(variant.name))).size,job.variants.length,`duplicate variant in ${group.group} / ${job.name}`)
+  }
+  const vag=WORK_CATALOG.find(group=>group.group==='Naprawy specyficzne VAG')
+  const pcv=vag?.jobs.find(job=>job.name==='Wymiana odmy silnika EA888')
+  assert.ok(pcv)
+  assert.ok(pcv.variants.every(variant=>variant.hours>0&&variant.price>0&&variant.customer_description.length>=80))
 })
