@@ -66,13 +66,15 @@ test('części wpisane jako do zamówienia nie wyłączają uwagi, złożone zam
  assert.equal(attentionReasons({...order,status:'WYDANE'},[],now).length,0)
 })
 
-test('płatność poprzedza QC wydania, a QC naprawy ma odrębny ekran',()=>{
+test('QC wydania poprzedza płatność, a QC naprawy ma odrębny ekran',()=>{
  const input={order:{status:'GOTOWE'},diagnosis:{conclusion:'Naprawa'},items:[{}],approvals:[{payload:{status:'APPROVED'}}],logs:[{payload:{ended_at:'2026-10-05'}}],qc:[{payload:{key:'documents',checked:true}}],total:100}
  const unpaid=deriveMobileOrderWorkflow(input)
- assert.equal(unpaid.next.key,'payment')
+ assert.equal(unpaid.next.key,'releaseQc')
  assert.equal(unpaid.steps.find(row=>row.key==='repairQc').tab,'repairQc')
  const paid=deriveMobileOrderWorkflow({...input,payments:[{payload:{amount:100}}]})
  assert.equal(paid.next.key,'releaseQc')
+ const checked=deriveMobileOrderWorkflow({...input,qc:[...input.qc,{payload:{key:'final',checked:true}}]})
+ assert.equal(checked.next.key,'payment')
 })
 
 test('wartość kafelka i historii uwzględnia zakres prac i cenę końcową',()=>{

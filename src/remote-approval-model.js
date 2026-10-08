@@ -16,6 +16,26 @@ export function mobileApprovalLocalId(now=Date.now(),random=0){
  return Number(now)*1000+(Math.abs(Number(random)||0)%1000)
 }
 
+export function legacyOrderLocalId(orderId){
+ const value=text(orderId)
+ if(/^\d+$/.test(value)){
+  const numeric=Number(value)
+  if(Number.isSafeInteger(numeric)&&numeric>0)return numeric
+ }
+ let hash=2166136261
+ for(let index=0;index<value.length;index++)hash=Math.imul(hash^value.charCodeAt(index),16777619)>>>0
+ return hash||1
+}
+
+export function remoteApprovalInsert({workshopId,approvalId,approvalLocalId,orderId,snapshot,tokenHash,snapshotHash,expiresAt}){
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+ if(!text(workshopId))throw new Error('Brak identyfikatora konta warsztatu.')
+ if(!Number.isSafeInteger(Number(approvalLocalId))||Number(approvalLocalId)<=0)throw new Error('Nieprawidłowy identyfikator akceptacji.')
+ if(!text(orderId))throw new Error('Nie można powiązać linku ze zleceniem.')
+ if(!snapshot?.terms?.version||!snapshot?.terms?.text)throw new Error('Brak warunków akceptacji w wycenie.')
+ return {workshop_id:text(workshopId),token:text(tokenHash),token_hash:text(tokenHash),approval_local_id:Number(approvalLocalId),approval_cloud_id:uuid.test(text(approvalId))?text(approvalId):null,order_local_id:legacyOrderLocalId(orderId),order_cloud_id:uuid.test(text(orderId))?text(orderId):null,snapshot,snapshot_hash:text(snapshotHash),hash_algorithm:'SHA-256',terms_version:snapshot.terms.version,terms_text:snapshot.terms.text,document_no:snapshot.approvalDocumentNo,approval_sequence:Number(snapshot.approvalSequence||1),previously_approved_total:Number(snapshot.previouslyApprovedTotal||0),expires_at:expiresAt}
+}
+
 function lineFromWork(row,index){
  const p=row?.payload||row||{},kind=String(p.kind||'ROBOCIZNA').toUpperCase(),labor=kind==='ROBOCIZNA'||kind==='LABOR'
  const quantity=amount(labor?(p.labor_hours||p.qty||1):(p.qty||1)),unitPrice=amount(p.unit_price)

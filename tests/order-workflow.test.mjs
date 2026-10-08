@@ -74,3 +74,19 @@ test('lista zleceń wylicza niezależny postęp każdego zlecenia',()=>{
  assert.equal(result['2'].next.key,'approval')
  assert.equal(result['2'].due,100)
 })
+
+test('pełny przepływ prowadzi od przyjęcia przez oba QC i płatność do wydania',()=>{
+ const base={order:{status:'PRZYJETE'},diagnosis:{conclusion:'Uszkodzone klocki'},items:[{payload:{kind:'ROBOCIZNA',name:'Wymiana klocków',qty:1,unit_price:200}}],parts:[{payload:{status:'ZAMONTOWANE',repair_item_cloud_id:'repair-1'}}],total:200}
+ assert.deepEqual(deriveMobileOrderWorkflow(base).steps.map(step=>step.key),['intake','diagnosis','quote','approval','repair','repairQc','releaseQc','payment','release'])
+ assert.equal(deriveMobileOrderWorkflow(base).next.key,'approval')
+ const approved={...base,approvals:[{payload:{status:'APPROVED',decided_at:'2026-10-08T09:00:00Z'}}],logs:[{payload:{ended_at:'2026-10-08T10:00:00Z'}}]}
+ assert.equal(deriveMobileOrderWorkflow(approved).next.key,'repairQc')
+ const repairChecked={...approved,qc:[{payload:{key:'documents',checked:true}}]}
+ assert.equal(deriveMobileOrderWorkflow(repairChecked).next.key,'releaseQc')
+ const releaseChecked={...repairChecked,qc:[...repairChecked.qc,{payload:{key:'final',checked:true}}]}
+ assert.equal(deriveMobileOrderWorkflow(releaseChecked).next.key,'payment')
+ const paid={...releaseChecked,payments:[{payload:{amount:200}}]}
+ assert.equal(deriveMobileOrderWorkflow(paid).next.key,'release')
+ const released={...paid,order:{status:'GOTOWE'},notes:{release_notes:'Pojazd wydany po jeździe próbnej'}}
+ assert.equal(deriveMobileOrderWorkflow(released).complete,true)
+})

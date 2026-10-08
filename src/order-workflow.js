@@ -11,8 +11,8 @@ export const MOBILE_ORDER_STEPS=[
  ['approval','Akceptacja klienta','quote'],
  ['repair','Naprawa','time'],
  ['repairQc','QC naprawy','repairQc'],
- ['payment','Płatność','settlement'],
  ['releaseQc','QC przed wydaniem','release'],
+ ['payment','Płatność','settlement'],
  ['release','Wydanie','release']
 ]
 
@@ -36,9 +36,9 @@ export function deriveMobileOrderWorkflow({order={},diagnosis={},approvals=[],pa
  const checked=key=>Boolean(qc.find(row=>(row.payload?.key||row.payload?.check_key)===key)?.payload?.checked)
  const repairQcDone=repairDone&&checked('documents')
  const paid=payments.reduce((sum,row)=>sum+Number(row.payload?.amount||0),0)
- const paymentDone=repairQcDone&&(Number(total||0)<=0||paid+0.01>=Number(total||0))
- const releaseQcDone=paymentDone&&checked('final')
- const releaseDone=releaseQcDone&&Boolean(String(notes?.release_notes||'').trim())&&order.status==='GOTOWE'
+ const releaseQcDone=repairQcDone&&checked('final')
+ const paymentDone=releaseQcDone&&(Number(total||0)<=0||paid+0.01>=Number(total||0))
+ const releaseDone=paymentDone&&Boolean(String(notes?.release_notes||'').trim())&&order.status==='GOTOWE'
  const state={intake:intakeDone,diagnosis:diagnosisDone,quote:quoteDone,approval:approvalDone,repair:repairDone,repairQc:repairQcDone,releaseQc:releaseQcDone,payment:paymentDone,release:releaseDone}
  const steps=MOBILE_ORDER_STEPS.map(([key,label,tab])=>({key,label,tab,done:Boolean(state[key])}))
  const next=steps.find(step=>!step.done)||null

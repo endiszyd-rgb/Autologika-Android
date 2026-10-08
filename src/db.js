@@ -5,6 +5,7 @@ import {recordId,sameRecordId} from './record-id.js'
 import {customerPayload,duplicateCustomer} from './customer-model.js'
 import {normalizePartPayload} from './part-quantity.js'
 import {canonicalEntityType,normalizeSyncPayload} from './sync-contract.js'
+import {inventoryAssignmentPayload} from './order-part-links.js'
 
 let dbPromise
 export function db(){ if(!dbPromise)dbPromise=SQLite.openDatabaseAsync('autologika-mobile.db'); return dbPromise }
@@ -59,6 +60,16 @@ export async function initDb(){
     await d.runAsync("UPDATE records SET dirty=1,updated_at=? WHERE entity_type='delivery_document_imports' AND deleted_at IS NULL",[new Date().toISOString()])
     await d.runAsync("INSERT INTO meta(key,value) VALUES ('deliveryDocumentFilesV1','1') ON CONFLICT(key) DO UPDATE SET value='1'")
   }
+  const partRelationsMigration=await d.getFirstAsync("SELECT value FROM meta WHERE key='partRepairRelationsV1'")
+  if(!partRelationsMigration?.value){
+    const rows=await d.getAllAsync("SELECT cloud_id,payload,version FROM records WHERE entity_type='job_part_orders' AND deleted_at IS NULL")
+    for(const row of rows){
+      let payload
+      try{payload=JSON.parse(row.payload||'{}')}catch{continue}
+      if(!payload.source){payload.source=payload.inventory_part_cloud_id?'MAGAZYN':'ZAMOWIENIE';await d.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='job_part_orders' AND cloud_id=?",[JSON.stringify(payload),new Date().toISOString(),Number(row.version||1)+1,row.cloud_id])}
+    }
+    await d.runAsync("INSERT INTO meta(key,value) VALUES ('partRepairRelationsV1','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+  }
 }
 export const now=()=>new Date().toISOString()
 export const uid=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
@@ -66,6 +77,37 @@ export async function list(type){ const d=await db(),entityType=canonicalEntityT
 export async function get(type,id){ const d=await db(),entityType=canonicalEntityType(type); const x=await d.getFirstAsync('SELECT * FROM records WHERE entity_type=? AND cloud_id=?',[entityType,id]); return x?{...x,payload:normalizeSyncPayload(entityType,JSON.parse(x.payload||'{}'))}:null }
 export async function put(type,id,payload,{dirty=1,updatedAt=now(),version=1}={}){ const d=await db(),entityType=canonicalEntityType(type),normalized=normalizeSyncPayload(entityType,payload); await d.runAsync(`INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,?,?) ON CONFLICT(entity_type,cloud_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,version=excluded.version,dirty=excluded.dirty,deleted_at=NULL`,[entityType,id,JSON.stringify(normalized),updatedAt,version,dirty]); return id }
 export async function patch(type,id,changes){ const x=await get(type,id); if(!x)return; return put(type,id,{...x.payload,...changes},{dirty:1,version:(x.version||1)+1}) }
+export async function assignInventoryPart({inventoryId,orderId,repairItemId,qty,vehicle={}}){
+ const d=await db(),inventoryRow=await get('inventory_parts',inventoryId),repairRow=await get('order_items',repairItemId)
+ if(!inventoryRow)throw new Error('Wybrana część nie istnieje już w magazynie.')
+ if(!repairRow||!sameRecordId(repairRow.payload.order_cloud_id,orderId))throw new Error('Wybrana pozycja naprawy nie istnieje w tym zleceniu.')
+ const payloads=inventoryAssignmentPayload({inventory:inventoryRow.payload,inventoryId,orderId,repairItem:repairRow.payload,repairItemId,qty,vehicle}),jobPartId=uid(),costItemId=uid(),stamp=now()
+ payloads.jobPart.cost_item_cloud_id=costItemId
+ payloads.orderItem.job_part_order_cloud_id=jobPartId
+ await d.withExclusiveTransactionAsync(async tx=>{
+  const latest=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[inventoryId])
+  if(!latest)throw new Error('Wybrana część nie istnieje już w magazynie.')
+  const current=JSON.parse(latest.payload||'{}'),count=Number(payloads.jobPart.qty||0),stock=Math.round(Number(current.stock||0))
+  if(stock<count)throw new Error(`W magazynie dostępne: ${stock} szt.`)
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...current,stock:stock-count}),stamp,Number(latest.version||1)+1,inventoryId])
+  for(const [type,id,payload] of [['job_part_orders',jobPartId,payloads.jobPart],['order_items',costItemId,payloads.orderItem]])await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,1,1)",[type,id,JSON.stringify(payload),stamp])
+ })
+ return {jobPartId,costItemId}
+}
+
+export async function unassignOrderPart(partId){
+ const d=await db(),row=await get('job_part_orders',partId)
+ if(!row)return
+ const payload=row.payload||{},stamp=now()
+ await d.withExclusiveTransactionAsync(async tx=>{
+  if(payload.source==='MAGAZYN'&&payload.inventory_part_cloud_id){
+   const stockRow=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[payload.inventory_part_cloud_id])
+   if(stockRow){const stock=JSON.parse(stockRow.payload||'{}');await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...stock,stock:Math.round(Number(stock.stock||0))+Math.round(Number(payload.qty||1))}),stamp,Number(stockRow.version||1)+1,payload.inventory_part_cloud_id])}
+  }
+  if(payload.cost_item_cloud_id)await tx.runAsync("UPDATE records SET deleted_at=?,updated_at=?,dirty=1 WHERE entity_type='order_items' AND cloud_id=?",[stamp,stamp,payload.cost_item_cloud_id])
+  await tx.runAsync("UPDATE records SET deleted_at=?,updated_at=?,dirty=1 WHERE entity_type='job_part_orders' AND cloud_id=?",[stamp,stamp,partId])
+ })
+}
 const clean=value=>String(value??'').trim()
 const normalizePlate=value=>clean(value).replace(/\s+/g,' ').toUpperCase()
 const normalizeVin=value=>clean(value).replace(/\s+/g,'').toUpperCase()

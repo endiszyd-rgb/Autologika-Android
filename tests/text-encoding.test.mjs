@@ -24,6 +24,23 @@ test('interfejs telefonu wspiera obie orientacje bez wymuszonej szerokości',()=
  assert.match(app,/contentCompact:\{width:'100%',minWidth:0/)
  assert.doesNotMatch(app,/ScrollView horizontal=\{compact\}/)
  assert.match(app,/WIĘCEJ/)
+ assert.match(app,/<\/PageTransition><\/ScrollView>\{compact&&<MobileNav/)
+ assert.match(app,/borderTopWidth:1,borderTopColor:'#543A43'/)
+})
+
+test('centrum zlecenia używa ikon i osobnego układu nagłówka na telefonie',()=>{
+ const app=readFileSync('App.js','utf8')
+ assert.match(app,/\['parts','Części','car-cog'\]/)
+ assert.match(app,/phone&&ow\.orderHeroPhone/)
+ assert.match(app,/phone&&ow\.orderHeroSidePhone/)
+})
+
+test('kafelki Vehicle Health otwierają szczegóły oceny układu',()=>{
+ const app=readFileSync('App.js','utf8')
+ assert.match(app,/onPress=\{\(\)=>setSelected\(system\)\}/)
+ assert.match(app,/OCENA UKŁADU/)
+ assert.match(app,/ZALECANE DZIAŁANIE/)
+ assert.match(app,/issue\.points/)
 })
 
 test('ekran zleceń ma zdefiniowany panel tworzenia zlecenia',()=>{

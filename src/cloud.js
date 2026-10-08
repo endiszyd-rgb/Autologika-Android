@@ -5,7 +5,7 @@ import { dirty, markClean, metaGet, metaSet, put, patch, db } from './db'
 import { assertCloudOwner, needsFullReplay, remoteHeadsRoute, remotePageRoute, remoteWins, shouldApplyRemote } from './cloud-sync-model'
 import {normalizePartPayload} from './part-quantity'
 import {canonicalEntityType,normalizeSyncPayload} from './sync-contract'
-import {APPROVAL_PUBLIC_URL,canonicalJson,remoteApprovalPayload} from './remote-approval-model'
+import {APPROVAL_PUBLIC_URL,canonicalJson,remoteApprovalInsert,remoteApprovalPayload} from './remote-approval-model'
 
 const K='autologika_cloud_config_v2', S='autologika_cloud_session_v2'
 export async function loadCloud(){ try{return JSON.parse(await SecureStore.getItemAsync(K)||'{}')}catch{return {}} }
@@ -23,7 +23,15 @@ export async function login(email,password){const c=await loadCloud();if(!ok(c))
 export async function signup(email,password){const c=await loadCloud();if(!ok(c))throw new Error('Najpierw podaj URL i Publishable key Supabase.');const s=await authReq(c,'/auth/v1/signup',{method:'POST',body:JSON.stringify({email,password})});if(s?.access_token){const id=assertCloudOwner(await metaGet('lastSyncWorkshopId'),s.user?.id);await saveSession({access_token:s.access_token,refresh_token:s.refresh_token,expires_at:Date.now()+Number(s.expires_in||3600)*1000,user:s.user});await saveCloud({workshopId:id})}return s}
 async function sessionToken(c){let s=await loadSession();if(!s?.access_token)throw new Error('Zaloguj się do Autologika Cloud.');if(s.expires_at&&Date.now()>s.expires_at-60000&&s.refresh_token){const n=await authReq(c,'/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:s.refresh_token})});s={access_token:n.access_token,refresh_token:n.refresh_token||s.refresh_token,expires_at:Date.now()+Number(n.expires_in||3600)*1000,user:n.user||s.user};await saveSession(s)}return s.access_token}
 async function headers(c,extra={}){const token=await sessionToken(c);return {'apikey':c.key,'Authorization':`Bearer ${token}`,'Content-Type':'application/json',...extra}}
-async function req(c,path,opt={}){const r=await fetch(base(c)+path,{...opt,headers:{...(await headers(c)),...(opt.headers||{})}});if(!r.ok)throw new Error(`Cloud ${r.status}: ${(await r.text()).slice(0,350)}`);if(r.status===204)return null;const t=await r.text();return t?JSON.parse(t):null}
+function cloudError(status,body=''){
+ let detail=String(body||'').slice(0,500)
+ try{const parsed=JSON.parse(body);detail=parsed.message||parsed.error_description||parsed.error||detail}catch{}
+ if(status===401)return new Error('Sesja Autologika Cloud wygasła. Wyloguj się i zaloguj ponownie w Ustawieniach.')
+ if(/customer_approval_links|PGRST205|schema cache/i.test(detail))return new Error('Moduł zdalnych akceptacji w Supabase wymaga aktualizacji migracji SQL.')
+ if(status===409)return new Error(`Nie udało się utworzyć nowego linku z powodu konfliktu danych. ${detail}`)
+ return new Error(`Cloud ${status}: ${detail}`)
+}
+async function req(c,path,opt={}){const r=await fetch(base(c)+path,{...opt,headers:{...(await headers(c)),...(opt.headers||{})}});if(!r.ok)throw cloudError(r.status,await r.text());if(r.status===204)return null;const t=await r.text();return t?JSON.parse(t):null}
 export async function testConnection(){const c=await loadCloud();if(!ok(c))throw new Error('Uzupełnij poprawny Project URL i Publishable key Supabase.');let r;try{r=await fetch(base(c)+'/auth/v1/settings',{headers:{apikey:c.key}})}catch(e){throw new Error(`Brak połączenia z ${base(c)}: ${e?.message||e}`)}const t=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${t.slice(0,300)}`);return {ok:true,status:r.status}}
 export async function currentAccount(){const c=await loadCloud(),s=await loadSession();return {configured:ok(c),loggedIn:!!s?.access_token,email:s?.user?.email||'',userId:s?.user?.id||'',workshopId:s?.user?.id||c.workshopId||''}}
 
@@ -37,14 +45,13 @@ export async function approvalDeploymentStatus(){
  catch(error){return {ok:false,message:/customer_approval_links|PGRST205|schema cache/i.test(String(error?.message||error))?'Brakuje tabeli zdalnych akceptacji w Supabase. Uruchom migrację Remote Approval 2.0.':String(error?.message||error)}}
 }
 
-export async function createRemoteApproval({approvalId,approvalLocalId,orderLocalId,snapshot}){
+export async function createRemoteApproval({approvalId,approvalLocalId,orderId,snapshot}){
  const deployment=await approvalDeploymentStatus();if(!deployment.ok)throw new Error(deployment.message)
  const c=await loadCloud(),account=await currentAccount();if(!account.loggedIn||!account.workshopId)throw new Error('Zaloguj się do Autologika Cloud.')
  const token=hex(await Crypto.getRandomBytesAsync(32)),tokenHash=await sha256(token),snapshotHash=await sha256(canonicalJson(snapshot)),expiresAt=new Date(Date.now()+7*24*60*60*1000).toISOString()
- const row={workshop_id:account.workshopId,token:tokenHash,token_hash:tokenHash,approval_local_id:Number(approvalLocalId),approval_cloud_id:/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(approvalId))?approvalId:null,order_local_id:Number(orderLocalId),order_cloud_id:null,snapshot,snapshot_hash:snapshotHash,hash_algorithm:'SHA-256',terms_version:snapshot.terms.version,terms_text:snapshot.terms.text,document_no:snapshot.approvalDocumentNo,approval_sequence:Number(snapshot.approvalSequence||1),previously_approved_total:Number(snapshot.previouslyApprovedTotal||0),expires_at:expiresAt}
+ const row=remoteApprovalInsert({workshopId:account.workshopId,approvalId,approvalLocalId,orderId,snapshot,tokenHash,snapshotHash,expiresAt})
  const result=await req(c,'/rest/v1/customer_approval_links',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(row)}),remote=Array.isArray(result)?result[0]:result
- await patch('approvals',approvalId,{...remoteApprovalPayload({...row,...remote}),remote_local_id:Number(approvalLocalId)})
- return {ok:true,url:`${APPROVAL_PUBLIC_URL}${token}`,expiresAt,snapshotHash,remoteId:remote?.id||null}
+ return {ok:true,url:`${APPROVAL_PUBLIC_URL}${token}`,expiresAt,snapshotHash,remoteId:remote?.id||null,payload:{...remoteApprovalPayload({...row,...remote}),remote_local_id:Number(approvalLocalId)}}
 }
 
 export async function pullRemoteApproval(approvalId,approvalLocalId){
