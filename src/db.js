@@ -81,26 +81,80 @@ export async function assignInventoryPart({inventoryId,orderId,repairItemId,qty,
  const d=await db(),inventoryRow=await get('inventory_parts',inventoryId),repairRow=await get('order_items',repairItemId)
  if(!inventoryRow)throw new Error('Wybrana część nie istnieje już w magazynie.')
  if(!repairRow||!sameRecordId(repairRow.payload.order_cloud_id,orderId))throw new Error('Wybrana pozycja naprawy nie istnieje w tym zleceniu.')
- const payloads=inventoryAssignmentPayload({inventory:inventoryRow.payload,inventoryId,orderId,repairItem:repairRow.payload,repairItemId,qty,vehicle}),jobPartId=uid(),costItemId=uid(),stamp=now()
- payloads.jobPart.cost_item_cloud_id=costItemId
- payloads.orderItem.job_part_order_cloud_id=jobPartId
+ const payloads=inventoryAssignmentPayload({inventory:inventoryRow.payload,inventoryId,orderId,repairItem:repairRow.payload,repairItemId,qty,vehicle}),jobPartId=uid(),costItemId=uid(),repairPartId=uid(),stamp=now()
+ payloads.jobPart.cost_item_cloud_id=costItemId;payloads.jobPart.repair_part_cloud_id=repairPartId;payloads.jobPart.status='RESERVED'
+ payloads.orderItem.job_part_order_cloud_id=jobPartId;payloads.orderItem.repair_part_cloud_id=repairPartId
  await d.withExclusiveTransactionAsync(async tx=>{
-  const latest=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[inventoryId])
-  if(!latest)throw new Error('Wybrana część nie istnieje już w magazynie.')
-  const current=JSON.parse(latest.payload||'{}'),count=Number(payloads.jobPart.qty||0),stock=Math.round(Number(current.stock||0))
-  if(stock<count)throw new Error(`W magazynie dostępne: ${stock} szt.`)
-  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...current,stock:stock-count}),stamp,Number(latest.version||1)+1,inventoryId])
-  for(const [type,id,payload] of [['job_part_orders',jobPartId,payloads.jobPart],['order_items',costItemId,payloads.orderItem]])await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,1,1)",[type,id,JSON.stringify(payload),stamp])
+  const latest=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[inventoryId]);if(!latest)throw new Error('Wybrana część nie istnieje już w magazynie.')
+  const current=JSON.parse(latest.payload||'{}'),count=Number(payloads.jobPart.qty||0),stock=Math.round(Number(current.stock||0)),reservationRows=await tx.getAllAsync("SELECT payload FROM records WHERE entity_type='repair_parts' AND deleted_at IS NULL")
+  const reserved=reservationRows.map(row=>{try{return JSON.parse(row.payload||'{}')}catch{return {}}}).filter(row=>sameRecordId(row.inventory_part_cloud_id,inventoryId)).reduce((sum,row)=>sum+Math.max(0,Number(row.reserved_qty||0)),0),available=stock-reserved
+  if(available<count)throw new Error(`W magazynie dostępne po rezerwacjach: ${available} szt.`)
+  const repairPart={repair_operation_cloud_id:repairRow.payload.repair_operation_cloud_id||repairItemId,order_cloud_id:orderId,repair_item_cloud_id:repairItemId,inventory_part_cloud_id:inventoryId,job_part_order_cloud_id:jobPartId,order_item_cloud_id:costItemId,name:current.name,part_no:current.part_no||'',source:'INVENTORY',qty:count,reserved_qty:count,issued_qty:0,returned_qty:0,installed_qty:0,unit_cost:Number(current.unit_cost)||0,unit_price:Number(current.sell_price||current.unit_price)||0,status:'RESERVED',fitment_status:'UNVERIFIED',created_at:stamp}
+  for(const [type,id,payload] of [['repair_parts',repairPartId,repairPart],['job_part_orders',jobPartId,payloads.jobPart],['order_items',costItemId,payloads.orderItem]])await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,1,1)",[type,id,JSON.stringify(payload),stamp])
  })
- return {jobPartId,costItemId}
+ return {jobPartId,costItemId,repairPartId,status:'RESERVED'}
 }
 
+export async function createSmartJobGraph({orderId,item,suggestedParts=[],procedure={},idempotencyKey=uid()}){
+ const d=await db(),stamp=now(),operationId=uid(),itemId=uid(),procedureId=uid(),key=String(idempotencyKey)
+ return d.withExclusiveTransactionAsync(async tx=>{
+  const rows=await tx.getAllAsync("SELECT cloud_id,payload FROM records WHERE entity_type='order_repair_operations' AND deleted_at IS NULL")
+  for(const row of rows){let payload={};try{payload=JSON.parse(row.payload||'{}')}catch{}if(sameRecordId(payload.order_cloud_id,orderId)&&payload.idempotency_key===key)return{operationId:row.cloud_id,existing:true}}
+  const operation={order_cloud_id:orderId,idempotency_key:key,order_item_cloud_id:itemId,procedure_run_cloud_id:procedureId,catalog_work_id:item.catalog_work_id||null,catalog_variant_id:item.catalog_variant_id||null,title:item.work_name||item.name,variant:item.variant_name||'',customer_description:item.customer_description||'',technical_description:item.technical_description||'',planned_hours:Number(item.labor_hours??item.qty)||0,labor_rate:Number(item.unit_price)||0,labor_cost_rate:Number(item.unit_cost)||0,discount_percent:0,vat_rate:Number(item.vat_rate??23),status:'PLANNED',created_at:stamp}
+  const orderItem={...item,procedure:undefined,repair_operation_cloud_id:operationId}
+  const procedurePayload={...procedure,order_cloud_id:orderId,order_item_cloud_id:itemId,repair_operation_cloud_id:operationId}
+  for(const [type,id,payload] of [['order_repair_operations',operationId,operation],['order_items',itemId,orderItem],['work_procedure_runs',procedureId,procedurePayload]])await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,1,1)",[type,id,JSON.stringify(payload),stamp])
+  for(const part of suggestedParts){
+   const jobPartId=uid(),repairPartId=uid(),qty=Math.max(1,Math.round(Number(part.qty)||1)),jobPart={...part,qty,repair_item_cloud_id:itemId,repair_operation_cloud_id:operationId,repair_part_cloud_id:repairPartId,repair_name:item.name,source:'ZAMOWIENIE',status:part.status||'DO_ZAMOWIENIA'},repairPart={repair_operation_cloud_id:operationId,order_cloud_id:orderId,job_part_order_cloud_id:jobPartId,name:part.name,part_no:part.part_no||'',source:'SUGGESTED',qty,reserved_qty:0,issued_qty:0,returned_qty:0,installed_qty:0,unit_cost:Number(part.unit_cost)||0,unit_price:Number(part.unit_price)||0,status:'SUGGESTED',created_at:stamp}
+   for(const [type,id,payload] of [['job_part_orders',jobPartId,jobPart],['repair_parts',repairPartId,repairPart]])await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES (?,?,?,?,1,1)",[type,id,JSON.stringify(payload),stamp])
+  }
+  for(let index=0;index<(procedure.qc||[]).length;index++){const id=uid(),payload={order_cloud_id:orderId,repair_operation_cloud_id:operationId,check_key:`repair:${operationId}:qc:${index}`,label:String(procedure.qc[index]),checked:false,note:'',created_at:stamp};await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('order_qc',?,?,?,1,1)",[id,JSON.stringify(payload),stamp])}
+  const eventId=uid(),event={order_cloud_id:orderId,event_type:'SMART_JOB_CREATED',title:'Dodano Smart Job',details:`${item.name} · ${suggestedParts.length} sugerowanych części`,created_at:stamp};await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('order_events',?,?,?,1,1)",[eventId,JSON.stringify(event),stamp])
+  return{operationId,itemId,procedureId,existing:false}
+ })
+}
+
+export async function issueReservedInventoryPart(repairPartId,eventKey=uid()){
+ const d=await db(),stamp=now();return d.withExclusiveTransactionAsync(async tx=>{
+  if(await tx.getFirstAsync("SELECT 1 FROM records WHERE entity_type='repair_part_events' AND cloud_id=? AND deleted_at IS NULL",[eventKey]))return {existing:true}
+  const link=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='repair_parts' AND cloud_id=? AND deleted_at IS NULL",[repairPartId]);if(!link)throw new Error('Rezerwacja części nie istnieje.')
+  const part=JSON.parse(link.payload||'{}'),amount=Math.round(Number(part.reserved_qty||0));if(amount<=0)return {existing:true}
+  const stockRow=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[part.inventory_part_cloud_id]);if(!stockRow)throw new Error('Część magazynowa nie istnieje.')
+  const stock=JSON.parse(stockRow.payload||'{}'),physical=Math.round(Number(stock.stock||0));if(physical<amount)throw new Error(`Stan fizyczny: ${physical} szt.`)
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...stock,stock:physical-amount}),stamp,Number(stockRow.version||1)+1,part.inventory_part_cloud_id])
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='repair_parts' AND cloud_id=?",[JSON.stringify({...part,reserved_qty:0,issued_qty:Number(part.issued_qty||0)+amount,status:'ISSUED'}),stamp,Number(link.version||1)+1,repairPartId])
+  if(part.job_part_order_cloud_id){const job=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='job_part_orders' AND cloud_id=?",[part.job_part_order_cloud_id]);if(job)await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='job_part_orders' AND cloud_id=?",[JSON.stringify({...JSON.parse(job.payload||'{}'),status:'WYDANA'}),stamp,Number(job.version||1)+1,part.job_part_order_cloud_id])}
+  await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('repair_part_events',?,?,?,1,1)",[eventKey,JSON.stringify({repair_part_cloud_id:repairPartId,event_key:eventKey,event_type:'ISSUE',qty:amount,created_at:stamp}),stamp]);return{existing:false,issued:amount}
+ })
+}
+
+export async function returnIssuedInventoryPart(repairPartId,eventKey=uid()){
+ const d=await db(),stamp=now();return d.withExclusiveTransactionAsync(async tx=>{
+  if(await tx.getFirstAsync("SELECT 1 FROM records WHERE entity_type='repair_part_events' AND cloud_id=? AND deleted_at IS NULL",[eventKey]))return {existing:true}
+  const link=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='repair_parts' AND cloud_id=? AND deleted_at IS NULL",[repairPartId]);if(!link)throw new Error('Powiązanie części nie istnieje.')
+  const part=JSON.parse(link.payload||'{}'),amount=Math.max(0,Math.round(Number(part.issued_qty||0)-Number(part.returned_qty||0)-Number(part.installed_qty||0)));if(!amount)return {existing:true}
+  const stockRow=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[part.inventory_part_cloud_id]);if(!stockRow)throw new Error('Część magazynowa nie istnieje.');const stock=JSON.parse(stockRow.payload||'{}')
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...stock,stock:Math.round(Number(stock.stock||0))+amount}),stamp,Number(stockRow.version||1)+1,part.inventory_part_cloud_id])
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='repair_parts' AND cloud_id=?",[JSON.stringify({...part,returned_qty:Number(part.returned_qty||0)+amount,status:'RETURNED'}),stamp,Number(link.version||1)+1,repairPartId])
+  await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('repair_part_events',?,?,?,1,1)",[eventKey,JSON.stringify({repair_part_cloud_id:repairPartId,event_key:eventKey,event_type:'RETURN',qty:amount,created_at:stamp}),stamp]);return{existing:false,returned:amount}
+ })
+}
 export async function unassignOrderPart(partId){
  const d=await db(),row=await get('job_part_orders',partId)
  if(!row)return
  const payload=row.payload||{},stamp=now()
  await d.withExclusiveTransactionAsync(async tx=>{
-  if(payload.source==='MAGAZYN'&&payload.inventory_part_cloud_id){
+  if(payload.repair_part_cloud_id){
+   const link=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='repair_parts' AND cloud_id=? AND deleted_at IS NULL",[payload.repair_part_cloud_id])
+   if(link){
+    const repairPart=JSON.parse(link.payload||'{}'),returnable=Math.max(0,Math.round(Number(repairPart.issued_qty||0)-Number(repairPart.returned_qty||0)-Number(repairPart.installed_qty||0)))
+    if(returnable&&repairPart.inventory_part_cloud_id){
+     const stockRow=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[repairPart.inventory_part_cloud_id])
+     if(stockRow){const stock=JSON.parse(stockRow.payload||'{}');await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...stock,stock:Math.round(Number(stock.stock||0))+returnable}),stamp,Number(stockRow.version||1)+1,repairPart.inventory_part_cloud_id])}
+    }
+    await tx.runAsync("UPDATE records SET deleted_at=?,updated_at=?,dirty=1 WHERE entity_type='repair_parts' AND cloud_id=?",[stamp,stamp,payload.repair_part_cloud_id])
+   }
+  }else if(payload.source==='MAGAZYN'&&payload.inventory_part_cloud_id&&payload.status!=='RESERVED'){
    const stockRow=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[payload.inventory_part_cloud_id])
    if(stockRow){const stock=JSON.parse(stockRow.payload||'{}');await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...stock,stock:Math.round(Number(stock.stock||0))+Math.round(Number(payload.qty||1))}),stamp,Number(stockRow.version||1)+1,payload.inventory_part_cloud_id])}
   }
