@@ -6,6 +6,7 @@ import {customerPayload,duplicateCustomer} from './customer-model.js'
 import {normalizePartPayload} from './part-quantity.js'
 import {canonicalEntityType,normalizeSyncPayload} from './sync-contract.js'
 import {inventoryAssignmentPayload} from './order-part-links.js'
+import {cancelReservationTransition,installIssuedTransition} from './repair-workflow.js'
 
 let dbPromise
 export function db(){ if(!dbPromise)dbPromise=SQLite.openDatabaseAsync('autologika-mobile.db'); return dbPromise }
@@ -136,7 +137,28 @@ export async function returnIssuedInventoryPart(repairPartId,eventKey=uid()){
   const stockRow=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='inventory_parts' AND cloud_id=? AND deleted_at IS NULL",[part.inventory_part_cloud_id]);if(!stockRow)throw new Error('Część magazynowa nie istnieje.');const stock=JSON.parse(stockRow.payload||'{}')
   await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='inventory_parts' AND cloud_id=?",[JSON.stringify({...stock,stock:Math.round(Number(stock.stock||0))+amount}),stamp,Number(stockRow.version||1)+1,part.inventory_part_cloud_id])
   await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='repair_parts' AND cloud_id=?",[JSON.stringify({...part,returned_qty:Number(part.returned_qty||0)+amount,status:'RETURNED'}),stamp,Number(link.version||1)+1,repairPartId])
+  if(part.job_part_order_cloud_id){const job=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='job_part_orders' AND cloud_id=?",[part.job_part_order_cloud_id]);if(job)await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='job_part_orders' AND cloud_id=?",[JSON.stringify({...JSON.parse(job.payload||'{}'),status:'ZWROT_ZAKONCZONY'}),stamp,Number(job.version||1)+1,part.job_part_order_cloud_id])}
   await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('repair_part_events',?,?,?,1,1)",[eventKey,JSON.stringify({repair_part_cloud_id:repairPartId,event_key:eventKey,event_type:'RETURN',qty:amount,created_at:stamp}),stamp]);return{existing:false,returned:amount}
+ })
+}
+export async function cancelInventoryReservation(repairPartId,eventKey=uid()){
+ const d=await db(),stamp=now();return d.withExclusiveTransactionAsync(async tx=>{
+  if(await tx.getFirstAsync("SELECT 1 FROM records WHERE entity_type='repair_part_events' AND cloud_id=? AND deleted_at IS NULL",[eventKey]))return{existing:true}
+  const link=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='repair_parts' AND cloud_id=? AND deleted_at IS NULL",[repairPartId]);if(!link)throw new Error('Rezerwacja części nie istnieje.')
+  const part=JSON.parse(link.payload||'{}'),transition=cancelReservationTransition(part),amount=transition.amount
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='repair_parts' AND cloud_id=?",[JSON.stringify(transition.payload),stamp,Number(link.version||1)+1,repairPartId])
+  if(part.job_part_order_cloud_id){const job=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='job_part_orders' AND cloud_id=?",[part.job_part_order_cloud_id]);if(job)await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='job_part_orders' AND cloud_id=?",[JSON.stringify({...JSON.parse(job.payload||'{}'),status:'ANULOWANE'}),stamp,Number(job.version||1)+1,part.job_part_order_cloud_id])}
+  await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('repair_part_events',?,?,?,1,1)",[eventKey,JSON.stringify({repair_part_cloud_id:repairPartId,event_key:eventKey,event_type:'CANCEL_RESERVATION',qty:amount,created_at:stamp}),stamp]);return{existing:false,cancelled:amount}
+ })
+}
+export async function installIssuedInventoryPart(repairPartId,eventKey=uid()){
+ const d=await db(),stamp=now();return d.withExclusiveTransactionAsync(async tx=>{
+  if(await tx.getFirstAsync("SELECT 1 FROM records WHERE entity_type='repair_part_events' AND cloud_id=? AND deleted_at IS NULL",[eventKey]))return{existing:true}
+  const link=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='repair_parts' AND cloud_id=? AND deleted_at IS NULL",[repairPartId]);if(!link)throw new Error('Wydanie części nie istnieje.')
+  const part=JSON.parse(link.payload||'{}'),transition=installIssuedTransition(part),amount=transition.amount
+  await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='repair_parts' AND cloud_id=?",[JSON.stringify(transition.payload),stamp,Number(link.version||1)+1,repairPartId])
+  if(part.job_part_order_cloud_id){const job=await tx.getFirstAsync("SELECT payload,version FROM records WHERE entity_type='job_part_orders' AND cloud_id=?",[part.job_part_order_cloud_id]);if(job)await tx.runAsync("UPDATE records SET payload=?,updated_at=?,version=?,dirty=1 WHERE entity_type='job_part_orders' AND cloud_id=?",[JSON.stringify({...JSON.parse(job.payload||'{}'),status:'ZAMONTOWANE'}),stamp,Number(job.version||1)+1,part.job_part_order_cloud_id])}
+  await tx.runAsync("INSERT INTO records(entity_type,cloud_id,payload,updated_at,version,dirty) VALUES ('repair_part_events',?,?,?,1,1)",[eventKey,JSON.stringify({repair_part_cloud_id:repairPartId,event_key:eventKey,event_type:'INSTALL',qty:amount,created_at:stamp}),stamp]);return{existing:false,installed:amount}
  })
 }
 export async function unassignOrderPart(partId){

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {availableInventoryQuantity,calculateMobileRepairEstimates,reservedInventoryTotals} from '../src/repair-workflow.js'
+import {availableInventoryQuantity,calculateMobileRepairEstimates,reservedInventoryTotals,cancelReservationTransition,installIssuedTransition} from '../src/repair-workflow.js'
 
 test('rezerwacja zmniejsza stan dostępny bez zmiany stanu fizycznego',()=>{
  const inventory={cloud_id:'part-1',payload:{stock:4}},parts=[{payload:{inventory_part_cloud_id:'part-1',reserved_qty:2}},{payload:{inventory_part_cloud_id:'part-1',reserved_qty:1}}]
@@ -17,5 +17,21 @@ test('kosztorys Android rozdziela naprawy, VAT i marżę',()=>{
  assert.equal(rows[0].margin,170)
  assert.equal(rows[1].gross,250)
  assert.equal(rows[1].margin,130)
+})
+
+test('anulowanie rezerwacji zwalnia dostępny stan bez ruchu fizycznego',()=>{
+ const result=cancelReservationTransition({qty:2,reserved_qty:2,issued_qty:0,status:'RESERVED'})
+ assert.equal(result.amount,2)
+ assert.equal(result.payload.reserved_qty,0)
+ assert.equal(result.payload.status,'CANCELLED')
+ assert.throws(()=>cancelReservationTransition(result.payload),/Brak aktywnej rezerwacji/)
+})
+
+test('montaż obejmuje tylko wydane i jeszcze nierozliczone sztuki',()=>{
+ const result=installIssuedTransition({qty:3,issued_qty:3,returned_qty:1,installed_qty:1,status:'ISSUED'})
+ assert.equal(result.amount,1)
+ assert.equal(result.payload.installed_qty,2)
+ assert.equal(result.payload.status,'INSTALLED')
+ assert.throws(()=>installIssuedTransition(result.payload),/Brak wydanych części/)
 })
 
