@@ -43,5 +43,8 @@ export default StyleSheet.create({
  orderWork:{color:'#aab7ac',fontSize:12,lineHeight:17,marginTop:5},
  orderCustomer:{color:'#89978d',fontSize:11,fontWeight:'700',marginTop:'auto',paddingTop:9},
  orderEmpty:{alignItems:'center',gap:4,padding:18,borderWidth:1,borderStyle:'dashed',borderColor:'#4C3942',borderRadius:10,backgroundColor:'#110D10'},
- visitWork:{color:'#c5ddaF',fontSize:12,lineHeight:17,marginTop:7,paddingLeft:9,borderLeftWidth:2,borderLeftColor:'#91bd61'}
+ visitWork:{color:'#c5ddaF',fontSize:12,lineHeight:17,marginTop:7,paddingLeft:9,borderLeftWidth:2,borderLeftColor:'#91bd61'},
+ resourceHint:{flexDirection:'row',alignItems:'center',gap:9,padding:11,borderWidth:1,borderColor:'#40573a',borderRadius:11,backgroundColor:'#111b12'},
+ resourceHintTitle:{color:'#dff5cd',fontSize:11,fontWeight:'950',letterSpacing:.5},
+ resourceHintText:{color:'#9caf9e',fontSize:11,fontWeight:'750',marginTop:2}
 })

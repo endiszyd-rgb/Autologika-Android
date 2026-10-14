@@ -50,6 +50,41 @@ export function appointmentStatusLabel(status){return ({PLAN:'PLAN',POTWIERDZONY
 
 export function appointmentSearch(row,order){return {...(row.payload||{}),order:order?.payload||{}}}
 
+export function resourceCalendar(resource={}){
+ const source=resource?.payload||resource||{},value=source.calendar??source.work_calendar_json
+ if(value&&typeof value==='object')return value
+ try{return JSON.parse(value||'{}')}catch{return {}}
+}
+
+const clockMinutes=value=>{const match=/^(\d{1,2}):(\d{2})$/.exec(String(value||''));if(!match)return null;const result=Number(match[1])*60+Number(match[2]);return result>=0&&result<=1440?result:null}
+const warsawParts=value=>{const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',weekday:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value)).reduce((out,part)=>(out[part.type]=part.value,out),{});return{weekday:{Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0}[parts.weekday],date:`${parts.year}-${parts.month}-${parts.day}`,minutes:Number(parts.hour)*60+Number(parts.minute)}}
+const overlaps=(a,b)=>Date.parse(a.start_at)<Date.parse(b.end_at)&&Date.parse(a.end_at)>Date.parse(b.start_at)
+
+export function normalizeResourceCalendar(value={}){
+ const weekdays=(value.weekdays||[1,2,3,4,5]).map(Number).filter(day=>day>=0&&day<=6),start=String(value.start||'08:00'),end=String(value.end||'17:00')
+ if(!weekdays.length||clockMinutes(start)===null||clockMinutes(end)===null||clockMinutes(end)<=clockMinutes(start))throw new Error('Sprawdź dni i godziny pracy zasobu.')
+ return {weekdays:[...new Set(weekdays)].sort(),start,end}
+}
+
+export function appointmentResourceIssues({resources=[],unavailability=[],links=[],appointments=[],resourceIds=[],payload={},excludeId=''}){
+ const ids=[...new Set((resourceIds||[]).filter(Boolean).map(String))],start=warsawParts(payload.start_at),end=warsawParts(payload.end_at),issues=[]
+ for(const id of ids){
+  const resource=resources.find(row=>String(row.cloud_id)===id),data=resource?.payload||{}
+  if(!resource||data.active===false)continue
+  const calendar=resourceCalendar(resource)
+  if(Object.keys(calendar).length){
+   const days=(calendar.weekdays||[]).map(Number),from=clockMinutes(calendar.start),to=clockMinutes(calendar.end),inside=start.date===end.date&&days.includes(start.weekday)&&from!==null&&to!==null&&start.minutes>=from&&end.minutes<=to
+   if(!inside)issues.push({kind:'OUTSIDE_CALENDAR',resource,reason:'poza kalendarzem pracy'})
+  }
+  const blocked=unavailability.filter(row=>String(row.payload?.resource_cloud_id)===id&&overlaps(row.payload,payload))
+  if(blocked.length)issues.push({kind:'UNAVAILABLE',resource,reason:blocked[0].payload?.reason||'zasób niedostępny',rows:blocked})
+  const linkedIds=new Set(links.filter(link=>String(link.payload?.resource_cloud_id)===id&&String(link.payload?.appointment_cloud_id)!==String(excludeId)).map(link=>String(link.payload?.appointment_cloud_id)))
+  const occupied=appointments.filter(row=>linkedIds.has(String(row.cloud_id))&&row.payload?.status!=='ANULOWANY'&&overlaps(row.payload,payload)),capacity=Math.max(1,Math.round(Number(data.capacity)||1))
+  if(occupied.length>=capacity)issues.push({kind:'CAPACITY',resource,reason:`pełna pojemność (${capacity})`,rows:occupied})
+ }
+ return issues
+}
+
 const closedOrder=status=>['WYDANE','CLOSED','DONE'].includes(String(status||'').toUpperCase())
 const partKind=kind=>['CZESC','CZĘŚĆ','PART'].includes(String(kind||'').toUpperCase())
 

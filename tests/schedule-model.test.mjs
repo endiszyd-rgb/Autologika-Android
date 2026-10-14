@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {appointmentForm,appointmentPayload,nextAppointmentStatus,scheduleDays,scheduleOrderChoices} from '../src/schedule-model.js'
+import {appointmentForm,appointmentPayload,appointmentResourceIssues,nextAppointmentStatus,normalizeResourceCalendar,scheduleDays,scheduleOrderChoices} from '../src/schedule-model.js'
 
 test('formularz terminarza zachowuje wizytę przechodzącą na kolejny dzień',()=>{
  const payload=appointmentPayload({title:'Diagnostyka',date:'2026-09-23',start_time:'23:30',end_date:'2026-09-24',end_time:'00:30',bay:'Stanowisko 2',status:'PLAN'})
@@ -51,4 +51,26 @@ test('nowa wizyta pokazuje aktywne zlecenia z autem, klientem i zakresem prac',(
  assert.equal(choices[0].customer,'Jan Kowalski')
  assert.equal(choices[0].workCount,2)
  assert.match(choices[0].workSummary,/Diagnostyka.*Wymiana/)
+})
+
+test('zasób respektuje warszawskie godziny pracy i zaplanowaną niedostępność',()=>{
+ const resources=[{cloud_id:'mechanic-1',payload:{name:'Jan',capacity:1,work_calendar_json:JSON.stringify({weekdays:[1,2,3,4,5],start:'08:00',end:'16:00'})}}],base={resources,resourceIds:['mechanic-1'],links:[],appointments:[]}
+ assert.equal(appointmentResourceIssues({...base,payload:{start_at:'2026-10-12T05:00:00.000Z',end_at:'2026-10-12T06:00:00.000Z'}})[0].kind,'OUTSIDE_CALENDAR')
+ const unavailability=[{payload:{resource_cloud_id:'mechanic-1',start_at:'2026-10-12T08:00:00.000Z',end_at:'2026-10-12T10:00:00.000Z',reason:'Szkolenie'}}]
+ const issues=appointmentResourceIssues({...base,unavailability,payload:{start_at:'2026-10-12T08:30:00.000Z',end_at:'2026-10-12T09:30:00.000Z'}})
+ assert.equal(issues[0].kind,'UNAVAILABLE')
+ assert.equal(issues[0].reason,'Szkolenie')
+})
+
+test('pojemność zasobu dopuszcza równoległe wizyty wyłącznie do limitu',()=>{
+ const resource={cloud_id:'lift-1',payload:{name:'Strefa szybka',capacity:2,calendar:{weekdays:[1],start:'08:00',end:'18:00'}}},payload={start_at:'2026-10-12T08:00:00.000Z',end_at:'2026-10-12T09:00:00.000Z'},appointments=[{cloud_id:'a',payload},{cloud_id:'b',payload}],links=['a','b'].map(id=>({payload:{appointment_cloud_id:id,resource_cloud_id:'lift-1'}}))
+ assert.equal(appointmentResourceIssues({resources:[resource],resourceIds:['lift-1'],appointments,links,payload,excludeId:'b'}).length,0)
+ const issues=appointmentResourceIssues({resources:[resource],resourceIds:['lift-1'],appointments,links,payload})
+ assert.equal(issues[0].kind,'CAPACITY')
+})
+
+test('kalendarz zasobu wymaga pełnego zakresu godzin i co najmniej jednego dnia',()=>{
+ assert.deepEqual(normalizeResourceCalendar({start:'07:00',end:'15:00',weekdays:[1,1,2]}),{weekdays:[1,2],start:'07:00',end:'15:00'})
+ assert.throws(()=>normalizeResourceCalendar({start:'15:00',end:'08:00',weekdays:[1]}),/godziny/)
+ assert.throws(()=>normalizeResourceCalendar({start:'08:00',end:'16:00',weekdays:[]}),/dni/)
 })
