@@ -1,5 +1,25 @@
 import {recordId,sameRecordId} from './record-id.js'
 
+export const BLOCKING_ORDER_PART_STATUSES=['DO_ZAMOWIENIA','ZAMOWIONE','W_DRODZE']
+export const ORDER_PART_STATUSES=['DO_ZAMOWIENIA','ZAMOWIONE','W_DRODZE','ODEBRANE','ZAMONTOWANE','DO_ZWROTU','ZWROT_ZAKONCZONY','ANULOWANE']
+
+export function deriveOrderPartWait(currentWaitState='BRAK',parts=[],orderId){
+ const blocking=parts.filter(row=>{const payload=row?.payload||row||{};return sameRecordId(payload.order_cloud_id,orderId)&&BLOCKING_ORDER_PART_STATUSES.includes(payload.status||'DO_ZAMOWIENIA')}).length
+ const current=currentWaitState||'BRAK'
+ const waitState=blocking>0?(current==='BRAK'||current==='CZESCI'?'CZESCI':current):(current==='CZESCI'?'BRAK':current)
+ return{blocking,waitState}
+}
+
+export function jobPartStatusTransition(part={},status,stamp=new Date().toISOString()){
+ if(!ORDER_PART_STATUSES.includes(status))throw new Error('Nieprawidłowy status części.')
+ const payload={...part,status}
+ if(status==='ZAMOWIONE'&&!payload.ordered_at)payload.ordered_at=stamp
+ if(status==='ODEBRANE'&&!payload.received_at)payload.received_at=stamp
+ if(status==='ZAMONTOWANE'&&!payload.installed_at)payload.installed_at=stamp
+ if(status==='ZWROT_ZAKONCZONY'&&!payload.returned_at)payload.returned_at=stamp
+ return payload
+}
+
 export function reservedInventoryTotals(repairParts=[]){
  return repairParts.reduce((totals,row)=>{const payload=row.payload||row,key=recordId(payload.inventory_part_cloud_id);if(key)totals[key]=(totals[key]||0)+Math.max(0,Math.round(Number(payload.reserved_qty)||0));return totals},{})
 }

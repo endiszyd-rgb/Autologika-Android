@@ -11,6 +11,13 @@ test('nowe zlecenie po przyjęciu przechodzi do podstawowej diagnozy',()=>{
  assert.equal(result.done,1)
 })
 
+test('akceptacja nie może wyprzedzić pustego zakresu naprawy',()=>{
+ const result=deriveMobileOrderWorkflow({order:{status:'DIAGNOZA'},diagnosis:{conclusion:'Usterka potwierdzona'},items:[],parts:[],approvals:[{payload:{status:'APPROVED',decided_at:'2026-10-16T08:00:00Z'}}]})
+ assert.equal(result.next.key,'quote')
+ assert.equal(result.suggestedStatus,'WYCENA')
+ assert.equal(result.steps.find(step=>step.key==='approval').done,false)
+})
+
 test('zakończona praca poprzedza QC naprawy i płatność',()=>{
  const result=deriveMobileOrderWorkflow({...complete,logs:[]})
  assert.equal(result.next.key,'repair')

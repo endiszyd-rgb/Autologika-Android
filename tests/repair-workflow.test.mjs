@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {availableInventoryQuantity,calculateMobileRepairEstimates,reservedInventoryTotals,cancelReservationTransition,installIssuedTransition} from '../src/repair-workflow.js'
+import {availableInventoryQuantity,calculateMobileRepairEstimates,reservedInventoryTotals,cancelReservationTransition,deriveOrderPartWait,installIssuedTransition,jobPartStatusTransition} from '../src/repair-workflow.js'
 
 test('rezerwacja zmniejsza stan dostępny bez zmiany stanu fizycznego',()=>{
  const inventory={cloud_id:'part-1',payload:{stock:4}},parts=[{payload:{inventory_part_cloud_id:'part-1',reserved_qty:2}},{payload:{inventory_part_cloud_id:'part-1',reserved_qty:1}}]
@@ -33,5 +33,27 @@ test('montaż obejmuje tylko wydane i jeszcze nierozliczone sztuki',()=>{
  assert.equal(result.payload.installed_qty,2)
  assert.equal(result.payload.status,'INSTALLED')
  assert.throws(()=>installIssuedTransition(result.payload),/Brak wydanych części/)
+})
+
+test('status części zapisuje datę montażu i zachowuje ją przy ponowieniu',()=>{
+ const first=jobPartStatusTransition({order_cloud_id:'order-1',status:'ODEBRANE'},'ZAMONTOWANE','2026-10-16T08:00:00.000Z')
+ assert.equal(first.status,'ZAMONTOWANE')
+ assert.equal(first.installed_at,'2026-10-16T08:00:00.000Z')
+ const repeated=jobPartStatusTransition(first,'ZAMONTOWANE','2026-10-16T09:00:00.000Z')
+ assert.equal(repeated.installed_at,first.installed_at)
+})
+
+test('oczekiwanie na części znika dopiero po zamknięciu ostatniej blokującej pozycji',()=>{
+ const parts=[{order_cloud_id:'order-1',status:'ZAMONTOWANE'},{order_cloud_id:'order-1',status:'W_DRODZE'},{order_cloud_id:'order-2',status:'DO_ZAMOWIENIA'}]
+ assert.deepEqual(deriveOrderPartWait('CZESCI',parts,'order-1'),{blocking:1,waitState:'CZESCI'})
+ parts[1].status='ODEBRANE'
+ assert.deepEqual(deriveOrderPartWait('CZESCI',parts,'order-1'),{blocking:0,waitState:'BRAK'})
+})
+
+test('automatyka części nie nadpisuje oczekiwania na decyzję klienta',()=>{
+ const parts=[{order_cloud_id:'order-1',status:'DO_ZAMOWIENIA'}]
+ assert.deepEqual(deriveOrderPartWait('DECYZJA',parts,'order-1'),{blocking:1,waitState:'DECYZJA'})
+ parts[0].status='ODEBRANE'
+ assert.deepEqual(deriveOrderPartWait('DECYZJA',parts,'order-1'),{blocking:0,waitState:'DECYZJA'})
 })
 
