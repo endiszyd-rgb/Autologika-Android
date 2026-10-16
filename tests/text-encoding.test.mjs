@@ -35,6 +35,19 @@ test('centrum zlecenia używa ikon i osobnego układu nagłówka na telefonie',(
  assert.match(app,/phone&&ow\.orderHeroSidePhone/)
 })
 
+test('centrum zlecenia grupuje szczegóły w pięć obszarów roboczych',()=>{
+ const app=readFileSync('App.js','utf8')
+ for(const label of ['PODGLĄD','PRACA','CZĘŚCI','DOKUMENTY','ROZLICZENIE'])assert.match(app,new RegExp(label))
+ assert.match(app,/ORDER_CENTER_GROUPS/)
+})
+
+test('nawigacja ma zapisany tryb mechanika i biura',()=>{
+ const app=readFileSync('App.js','utf8')
+ assert.match(app,/MECHANIC_NAV/)
+ assert.match(app,/metaGet\('workspaceMode'\)/)
+ assert.match(app,/metaSet\('workspaceMode',value\)/)
+})
+
 test('kafelki Vehicle Health otwierają szczegóły oceny układu',()=>{
  const app=readFileSync('App.js','utf8')
  assert.match(app,/onPress=\{\(\)=>setSelected\(system\)\}/)

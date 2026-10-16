@@ -1,8 +1,8 @@
-export const theme={
+﻿export const theme={
  colors:{
   canvas:'#09090B',canvasRaised:'#0E0D10',surface:'rgba(24,21,25,0.94)',surfaceHigh:'#201B20',surfaceHighest:'#292228',
   outline:'#40343B',outlineSoft:'#2D252A',text:'#F7F2F4',textMuted:'#AAA0A5',textDim:'#766D72',
-  primary:'#FF4651',primaryStrong:'#E52532',primarySoft:'#FFB3B8',primaryContainer:'#3A171D',onPrimary:'#FFFFFF',
+  primary:'#E52532',primaryStrong:'#E52532',primarySoft:'#FFB3B8',primaryContainer:'#3A171D',onPrimary:'#FFFFFF',
   success:'#55D889',warning:'#F3BE5B',danger:'#FF6B65',info:'#70B6FF',violet:'#C38CFF'
  },
  radius:{sm:10,md:16,lg:22,xl:28,pill:999},
